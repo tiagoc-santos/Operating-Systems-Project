@@ -147,11 +147,15 @@ int main(int argc, char *argv[]) {
         end_file = 1;
       }
     }
-
-    close(fd);
-    close(out_fd);
+    if (close(fd) < 0 || close(out_fd) < 0) {
+      fprintf(stderr, "Close error: %s\n", strerror(errno));
+      return -1;
+    }
+    ;
   }
   ems_terminate();
-  closedir(dirpath);
+  if(closedir(dirpath) < 0){
+    fprintf(stderr, "Error closing the directory: %s\n", strerror(errno));
+  }
   return 0;
 }
