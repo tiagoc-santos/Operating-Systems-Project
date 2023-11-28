@@ -54,7 +54,7 @@ int main(int argc, char *argv[]) {
     snprintf(file_path, sizeof(file_path), "%s/%s", argv[1], file->d_name);
 
     int fd = open(file_path, O_RDONLY);
-    int out_fd = open(strcat(file->d_name, ".out"),
+    int out_fd = open(strcat(strtok(file->d_name, "."), ".out"),
                       O_CREAT | O_TRUNC | O_WRONLY, S_IRUSR | S_IWUSR);
 
     if (fd < 0 || out_fd < 0) {
@@ -151,10 +151,9 @@ int main(int argc, char *argv[]) {
       fprintf(stderr, "Close error: %s\n", strerror(errno));
       return -1;
     }
-    ;
   }
   ems_terminate();
-  if(closedir(dirpath) < 0){
+  if (closedir(dirpath) < 0) {
     fprintf(stderr, "Error closing the directory: %s\n", strerror(errno));
   }
   return 0;

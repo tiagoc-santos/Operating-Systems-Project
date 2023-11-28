@@ -1,3 +1,6 @@
 *.out
 *.o
 ems
+*.dSYM
+*.DS_STORE
+*.jobs

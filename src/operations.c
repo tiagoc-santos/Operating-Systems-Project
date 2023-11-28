@@ -4,8 +4,8 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "eventlist.h"
 #include "constants.h"
+#include "eventlist.h"
 
 static struct EventList *event_list = NULL;
 static unsigned int state_access_delay_ms = 0;
@@ -215,7 +215,7 @@ int ems_list_events(int out_fd) {
 
   if (event_list->head == NULL) {
     bytes_written = write(out_fd, "No events\n", strlen("No events\n"));
-    if(bytes_written < 0){
+    if (bytes_written < 0) {
       return -1;
     }
     return 0;
@@ -224,10 +224,10 @@ int ems_list_events(int out_fd) {
   struct ListNode *current = event_list->head;
   while (current != NULL) {
     char buffer[BUFFER_LEN];
-    memset(buffer, 0 , sizeof(buffer));
+    memset(buffer, 0, sizeof(buffer));
     snprintf(buffer, sizeof(buffer), "Event: %u\n", (current->event)->id);
     bytes_written = write(out_fd, buffer, strlen(buffer));
-    if(bytes_written < 0){
+    if (bytes_written < 0) {
       return -1;
     }
     current = current->next;
