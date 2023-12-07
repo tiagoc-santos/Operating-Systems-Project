@@ -4,3 +4,4 @@ ems
 *.dSYM
 *.DS_STORE
 *.jobs
+.vscode

@@ -7,8 +7,8 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 #include <unistd.h>
-#include <wait.h>
 
 #include "constants.h"
 #include "operations.h"
@@ -131,7 +131,8 @@ int main(int argc, char *argv[]) {
           break;
 
         case CMD_WAIT:
-          if (parse_wait(fd, &delay, NULL) == -1) { // thread_id is not implemented
+          if (parse_wait(fd, &delay, NULL) ==
+              -1) { // thread_id is not implemented
             fprintf(stderr, "Invalid command. See HELP for usage\n");
             continue;
           }
