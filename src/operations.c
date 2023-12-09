@@ -1,3 +1,4 @@
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -185,9 +186,16 @@ int ems_show(unsigned int event_id, int out_fd) {
 
       char buffer[BUFFER_LEN];
       snprintf(buffer, sizeof(buffer), "%u", *seat);
-      bytes_written = write(out_fd, buffer, strlen(buffer));
-      if (bytes_written < 0) {
-        return -1;
+      long int len = (long int)strlen(buffer);
+      long int done = 0;
+      while (len > 0) {
+        bytes_written = write(out_fd, buffer + done, strlen(buffer));
+
+        if (bytes_written < 0) {
+          return -1;
+        }
+        len -= bytes_written;
+        done += bytes_written;
       }
       if (j < event->cols) {
         bytes_written = write(out_fd, " ", strlen(" "));
@@ -226,9 +234,16 @@ int ems_list_events(int out_fd) {
     char buffer[BUFFER_LEN];
     memset(buffer, 0, sizeof(buffer));
     snprintf(buffer, sizeof(buffer), "Event: %u\n", (current->event)->id);
-    bytes_written = write(out_fd, buffer, strlen(buffer));
-    if (bytes_written < 0) {
-      return -1;
+    long int len = (long int)strlen(buffer);
+    long int done = 0;
+    while (len > 0) {
+      bytes_written = write(out_fd, buffer + done, strlen(buffer));
+
+      if (bytes_written < 0) {
+        return -1;
+      }
+      len -= bytes_written;
+      done += bytes_written;
     }
     current = current->next;
   }

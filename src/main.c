@@ -2,6 +2,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -17,9 +18,9 @@
 int main(int argc, char *argv[]) {
   unsigned int state_access_delay_ms = STATE_ACCESS_DELAY_MS;
 
-  if (argc > 3) {
+  if (argc > 4) {
     char *endptr;
-    unsigned long int delay = strtoul(argv[3], &endptr, 10);
+    unsigned long int delay = strtoul(argv[4], &endptr, 10);
 
     if (*endptr != '\0' || delay > UINT_MAX) {
       fprintf(stderr, "Invalid delay value or value too large\n");
@@ -30,6 +31,7 @@ int main(int argc, char *argv[]) {
 
   char *endptr;
   unsigned long int MAX_PROC = strtoul(argv[2], &endptr, 10);
+  // unsigned long int MAX_THREADS = strtoul(argv[3], &endptr, 10);
 
   if (ems_init(state_access_delay_ms)) {
     fprintf(stderr, "Failed to initialize EMS\n");
@@ -46,14 +48,15 @@ int main(int argc, char *argv[]) {
 
   struct dirent *file;
   unsigned long int child_count = 0;
+  unsigned long int total_child = 0;
+  int status;
 
   while ((file = readdir(dirpath)) != NULL) {
-    unsigned int event_id, delay;
+    unsigned int event_id, delay, thread_id;
     size_t num_rows, num_columns, num_coords;
     size_t xs[MAX_RESERVATION_SIZE], ys[MAX_RESERVATION_SIZE];
     char file_path[BUFFER_LEN];
     pid_t pid;
-    int status;
 
     if (strcmp(file->d_name, ".") == 0 || strcmp(file->d_name, "..") == 0)
       continue;
@@ -64,11 +67,12 @@ int main(int argc, char *argv[]) {
     }
 
     pid = fork();
-    child_count++;
     if (pid == -1) {
       fprintf(stderr, "Error creating process");
       exit(EXIT_FAILURE);
     }
+    child_count++;
+    total_child++;
     if (pid == 0) {
       snprintf(file_path, sizeof(file_path), "%s/%s", argv[1], file->d_name);
 
@@ -131,12 +135,10 @@ int main(int argc, char *argv[]) {
           break;
 
         case CMD_WAIT:
-          if (parse_wait(fd, &delay, NULL) ==
-              -1) { // thread_id is not implemented
+          if (parse_wait(fd, &delay, &thread_id) == -1) {
             fprintf(stderr, "Invalid command. See HELP for usage\n");
             continue;
           }
-
           if (delay > 0) {
             printf("Waiting...\n");
             ems_wait(delay);
@@ -155,8 +157,8 @@ int main(int argc, char *argv[]) {
               "  RESERVE <event_id> [(<x1>,<y1>) (<x2>,<y2>) ...]\n"
               "  SHOW <event_id>\n"
               "  LIST\n"
-              "  WAIT <delay_ms> [thread_id]\n" // thread_id is not implemented
-              "  BARRIER\n"                     // Not implemented
+              "  WAIT <delay_ms> [thread_id]\n"
+              "  BARRIER\n"       // Not implemented
               "  HELP\n");
 
           break;
@@ -173,15 +175,21 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Close error: %s\n", strerror(errno));
         return -1;
       }
-      exit(EXIT_SUCCESS);
-    } else {
-      wait(&status);
-      if (WIFEXITED(status)) {
-        fprintf(stdout, "Child process exited with status: %d\n", status);
-      } else {
-        fprintf(stdout, "Child process exited abnormally");
+      ems_terminate();
+      if (closedir(dirpath) < 0) {
+        fprintf(stderr, "Error closing the directory: %s\n", strerror(errno));
       }
+      exit(EXIT_SUCCESS);
     }
+  }
+  while (total_child > 0) {
+    wait(&status);
+    if (WIFEXITED(status)) {
+      fprintf(stdout, "Child process exited with status: %d\n", status);
+    } else {
+      fprintf(stdout, "Child process exited abnormally");
+    }
+    total_child--;
   }
   ems_terminate();
   if (closedir(dirpath) < 0) {
