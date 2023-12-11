@@ -175,17 +175,14 @@ int main(int argc, char *argv[]) {
 
       if (fd < 0 || out_fd < 0) {
         fprintf(stderr, "Open error: %s\n", strerror(errno));
-        return -1;
+        return 1;
       }
       int file_descriptors[2];
       file_descriptors[0] = fd;
       file_descriptors[1] = out_fd;
       pthread_t thread_ids[MAX_THREADS];
       for (int i = 0; i < (int)MAX_THREADS; i++) {
-        pthread_t *id = malloc(sizeof(pthread_t));
-        *id = (pthread_t)i;
-        thread_ids[i] = *id;
-        if (pthread_create(&thread_ids[*id], NULL, thread_fn,
+        if (pthread_create(&thread_ids[i], NULL, thread_fn,
                            (void *)file_descriptors) != 0) {
           fprintf(stderr, "Error creating thread.");
           exit(EXIT_FAILURE);
