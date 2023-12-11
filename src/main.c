@@ -191,6 +191,11 @@ int main(int argc, char *argv[]) {
           exit(EXIT_FAILURE);
         }
       }
+      for (int i = 0; i < (int)MAX_THREADS; i++){
+        int j;
+        pthread_join(thread_ids[i], (void*) &j);
+      }
+      
       if (close(fd) < 0 || close(out_fd) < 0) {
         fprintf(stderr, "Close error: %s\n", strerror(errno));
         return -1;
@@ -203,11 +208,11 @@ int main(int argc, char *argv[]) {
     }
   }
   while (total_child > 0) {
-    wait(&status);
+    int pid = wait(&status);
     if (WIFEXITED(status)) {
-      fprintf(stdout, "Child process exited with status: %d\n", status);
+      fprintf(stdout, "Child process %d exited with status: %d\n",pid, status);
     } else {
-      fprintf(stdout, "Child process exited abnormally");
+      fprintf(stdout, "Child process %d exited abnormally", pid);
     }
     total_child--;
   }
