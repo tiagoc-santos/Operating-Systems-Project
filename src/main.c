@@ -15,7 +15,7 @@
 #include "operations.h"
 #include "parser.h"
 
-void *thread_fn(void *args) {
+int thread_fn(void *args) {
   unsigned int event_id, delay, thread_id;
   size_t num_rows, num_columns, num_coords;
   size_t xs[MAX_RESERVATION_SIZE], ys[MAX_RESERVATION_SIZE];
@@ -24,8 +24,10 @@ void *thread_fn(void *args) {
   int *file_descriptors = (int *)args;
   int fd = file_descriptors[0];
   int out_fd = file_descriptors[1];
-
+  //int index = file_descriptors[2];
+  
   while (!end_file) {
+    //locka
     switch (get_next(fd)) {
     case CMD_CREATE:
       if (parse_create(fd, &event_id, &num_rows, &num_columns) != 0) {
@@ -50,7 +52,7 @@ void *thread_fn(void *args) {
       if (ems_reserve(event_id, num_coords, xs, ys)) {
         fprintf(stderr, "Failed to reserve seats\n");
       }
-
+      //unlocka
       break;
 
     case CMD_SHOW:
@@ -108,7 +110,7 @@ void *thread_fn(void *args) {
       end_file = 1;
     }
   }
-  return NULL;
+  return 0;
 }
 
 int main(int argc, char *argv[]) {
@@ -177,16 +179,20 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Open error: %s\n", strerror(errno));
         return 1;
       }
-      int file_descriptors[2];
-      file_descriptors[0] = fd;
-      file_descriptors[1] = out_fd;
+      int args[3];
+      args[0] = fd;
+      args[1] = out_fd;
       pthread_t thread_ids[MAX_THREADS];
       for (int i = 0; i < (int)MAX_THREADS; i++) {
-        if (pthread_create(&thread_ids[i], NULL, thread_fn,
-                           (void *)file_descriptors) != 0) {
+        int *index = malloc(sizeof(int));
+        *index = i;
+        args[2] = *index;
+        if (pthread_create(&thread_ids[i], NULL,(void *) thread_fn,
+                           (void *)args) != 0) {
           fprintf(stderr, "Error creating thread.");
           exit(EXIT_FAILURE);
         }
+        free(index);
       }
       for (int i = 0; i < (int)MAX_THREADS; i++){
         int j;
