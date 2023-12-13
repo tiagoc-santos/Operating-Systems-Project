@@ -206,8 +206,7 @@ int main(int argc, char *argv[]) {
     char file_path[BUFFER_LEN];
     pid_t pid;
 
-    if (strcmp(file->d_name, ".") == 0 || strcmp(file->d_name, "..") == 0 || strstr(file->d_name, ".out")
-    || strstr(file->d_name, ".result"))
+    if (strcmp(file->d_name, ".") == 0 || strcmp(file->d_name, "..") == 0 || strstr(file->d_name, ".out"))
       continue;
 
     if (child_count >= MAX_PROC) {

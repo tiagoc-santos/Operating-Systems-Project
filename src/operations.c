@@ -131,7 +131,6 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t *xs,
     fprintf(stderr, "EMS state must be initialized\n");
     return 1;
   }
-  
 
   struct Event *event = get_event_with_delay(event_id);
 
@@ -141,9 +140,9 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t *xs,
     return 1;
   }
   pthread_mutex_unlock(&event_lock);
-  pthread_rwlock_wrlock(&event->lock);
+  pthread_rwlock_rdlock(&event->lock);
   unsigned int reservation_id = ++event->reservations;
-
+  pthread_rwlock_wrlock(&event->lock);
   size_t i = 0;
   for (; i < num_seats; i++) {
     size_t row = xs[i];
@@ -153,7 +152,6 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t *xs,
       fprintf(stderr, "Invalid seat\n");
       break;
     }
-
     if (*get_seat_with_delay(event, seat_index(event, row, col)) != 0) {
       fprintf(stderr, "Seat already reserved\n");
       break;
@@ -188,7 +186,7 @@ int ems_show(unsigned int event_id, int out_fd) {
     return 1;
   }
   pthread_mutex_unlock(&event_lock);
-  
+
   long int bytes_written;
   pthread_rwlock_rdlock(&event->lock);
   pthread_rwlock_wrlock(&output_lock);
