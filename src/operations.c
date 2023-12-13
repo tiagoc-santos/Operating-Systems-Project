@@ -248,7 +248,6 @@ int ems_list_events(int out_fd) {
     return 0;
   }
   struct ListNode *current = event_list->head;
-  pthread_mutex_unlock(&event_lock);
   pthread_rwlock_wrlock(&output_lock);
   while (current != NULL) {
     char buffer[BUFFER_LEN];
@@ -268,6 +267,7 @@ int ems_list_events(int out_fd) {
     current = current->next;
   }
   pthread_rwlock_unlock(&output_lock);
+  pthread_mutex_unlock(&event_lock);
   return 0;
 }
 
