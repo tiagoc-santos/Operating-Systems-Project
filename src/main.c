@@ -58,7 +58,10 @@ int thread_fn(void *arg) {
       thread_id = 0;
       pthread_rwlock_unlock(&wait_mut);
       inside_wait = 1;
-      ems_wait(delay_thread);
+      pthread_rwlock_rdlock(&wait_mut);
+      unsigned int delay = delay_thread;
+      pthread_rwlock_unlock(&wait_mut);
+      ems_wait(delay);
     }
     if (!inside_wait) {
       pthread_rwlock_unlock(&wait_mut);
@@ -229,7 +232,13 @@ int main(int argc, char *argv[]) {
       continue;
 
     if (child_count >= MAX_PROC) {
-      wait(NULL);
+      int child_pid = wait(&status);
+      if (WIFEXITED(status)) {
+        fprintf(stdout, "Child process %d exited with status: %d\n", child_pid, status);
+      } else {
+        fprintf(stdout, "Child process %d exited abnormally", child_pid);
+      }
+      total_child--;
       child_count--;
     }
     //creates a new child process
