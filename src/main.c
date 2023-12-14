@@ -31,6 +31,7 @@ unsigned int delay_thread = 0, thread_id = 0;
 // global variable to inform other threads that a barrier has been encountered
 int barrier = 0;
 
+//struct used for transmitting parameters to thread_fn.
 struct Args {
   int out_fd, fd, index;
 };
@@ -71,6 +72,7 @@ int thread_fn(void *arg) {
     }
     pthread_rwlock_unlock(&barrier_mut);
     pthread_mutex_lock(&file_mutex);
+    //reads each line of the file and executes its determined command
     switch (get_next(fd)) {
     case CMD_CREATE:
       if (parse_create(fd, &event_id, &num_rows, &num_columns) != 0) {
@@ -230,8 +232,9 @@ int main(int argc, char *argv[]) {
       wait(NULL);
       child_count--;
     }
-
+    //creates a new child process
     pid = fork();
+
     if (pid == -1) {
       fprintf(stderr, "Error creating process");
       exit(EXIT_FAILURE);
