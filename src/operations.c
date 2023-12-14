@@ -85,16 +85,19 @@ int ems_terminate() {
 int ems_create(unsigned int event_id, size_t num_rows, size_t num_cols) {
   pthread_mutex_lock(&event_lock);
   if (event_list == NULL) {
+    pthread_mutex_unlock(&event_lock);
     fprintf(stderr, "EMS state must be initialized\n");
     return 1;
   }
   if (get_event_with_delay(event_id) != NULL) {
+    pthread_mutex_unlock(&event_lock);
     fprintf(stderr, "Event already exists\n");
     return 1;
   }
   struct Event *event = malloc(sizeof(struct Event));
 
   if (event == NULL) {
+    pthread_mutex_unlock(&event_lock);
     fprintf(stderr, "Error allocating memory for event\n");
     return 1;
   }
@@ -103,6 +106,7 @@ int ems_create(unsigned int event_id, size_t num_rows, size_t num_cols) {
   event->cols = num_cols;
   event->reservations = 0;
   event->data = malloc(num_rows * num_cols * sizeof(unsigned int));
+  pthread_rwlock_init(&event->lock, NULL);
 
   if (event->data == NULL) {
     pthread_mutex_unlock(&event_lock);
