@@ -15,16 +15,23 @@
 #include "operations.h"
 #include "parser.h"
 
-//mutex to make sure each thread only reads one line at a time
+// mutex to make sure each thread only reads one line at a time
 pthread_mutex_t file_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+// lock that protects the reading and writing of the barrier variable
 pthread_rwlock_t barrier_mut = PTHREAD_RWLOCK_INITIALIZER;
+
+// lock that protects the reading and writing of the delay_thread and thread_id
+// variables
 pthread_rwlock_t wait_mut = PTHREAD_RWLOCK_INITIALIZER;
 
+// global variable to keep the delay and thread id passed in the WAIT command
 unsigned int delay_thread = 0, thread_id = 0;
-//global variable to inform other threads that a barrier has been encountered
+
+// global variable to inform other threads that a barrier has been encountered
 int barrier = 0;
 
-struct Args{
+struct Args {
   int out_fd, fd, index;
 };
 
@@ -41,6 +48,7 @@ int thread_fn(void *arg) {
   int index = args->index;
 
   while (!end_file) {
+    // checks if a WAIT has been parsed with the corresponding thread id
     pthread_rwlock_rdlock(&wait_mut);
     if (index == (int)thread_id && delay_thread > 0) {
       pthread_rwlock_unlock(&wait_mut);
@@ -51,16 +59,17 @@ int thread_fn(void *arg) {
       inside_wait = 1;
       ems_wait(delay_thread);
     }
-    if(!inside_wait){
+    if (!inside_wait) {
       pthread_rwlock_unlock(&wait_mut);
     }
+    // checks if a barrier has been parsed
     pthread_rwlock_rdlock(&barrier_mut);
     if (barrier) {
       pthread_rwlock_unlock(&barrier_mut);
       return 1;
     }
     pthread_rwlock_unlock(&barrier_mut);
-    pthread_mutex_lock(&file_mutex);  
+    pthread_mutex_lock(&file_mutex);
     switch (get_next(fd)) {
     case CMD_CREATE:
       if (parse_create(fd, &event_id, &num_rows, &num_columns) != 0) {
@@ -168,7 +177,7 @@ int thread_fn(void *arg) {
 
 int main(int argc, char *argv[]) {
   unsigned int state_access_delay_ms = STATE_ACCESS_DELAY_MS;
-  
+
   if (argc > 4) {
     char *endptr;
     unsigned long int delay = strtoul(argv[4], &endptr, 10);
@@ -189,6 +198,7 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
+  // opens the directory passed as an argument
   DIR *dirpath = opendir(argv[1]);
 
   if (dirpath == NULL) {
@@ -202,11 +212,15 @@ int main(int argc, char *argv[]) {
   unsigned long int total_child = 0;
   int status;
 
+  // reads the files inside the directory
   while ((file = readdir(dirpath)) != NULL) {
     char file_path[BUFFER_LEN];
     pid_t pid;
 
-    if (strcmp(file->d_name, ".") == 0 || strcmp(file->d_name, "..") == 0 || strstr(file->d_name, ".out"))
+    // ignores files inside the directory whose name are "." or ".." and files
+    // that end in ".out"
+    if (strcmp(file->d_name, ".") == 0 || strcmp(file->d_name, "..") == 0 ||
+        strstr(file->d_name, ".out"))
       continue;
 
     if (child_count >= MAX_PROC) {
@@ -221,13 +235,16 @@ int main(int argc, char *argv[]) {
     }
     child_count++;
     total_child++;
+    // child process code
     if (pid == 0) {
       snprintf(file_path, sizeof(file_path), "%s/%s", argv[1], file->d_name);
 
+      // opens the input file
       int fd = open(file_path, O_RDONLY);
       memset(file_path, 0, sizeof(file_path));
       snprintf(file_path, sizeof(file_path), "%s/%s", argv[1],
                strcat(strtok(file->d_name, "."), ".out"));
+      // creates the output file
       int out_fd =
           open(file_path, O_CREAT | O_TRUNC | O_WRONLY, S_IRUSR | S_IWUSR);
 
@@ -236,12 +253,13 @@ int main(int argc, char *argv[]) {
         return 1;
       }
       pthread_t thread_ids[MAX_THREADS + 1];
+      // creates the threads to parse the file
       for (int i = 1; i <= (int)MAX_THREADS; i++) {
         int *index = malloc(sizeof(int));
-        struct Args * args = malloc(sizeof(struct Args));
+        struct Args *args = malloc(sizeof(struct Args));
         *index = i;
         args->fd = fd;
-        args->out_fd =out_fd;
+        args->out_fd = out_fd;
         args->index = *index;
         if (pthread_create(&thread_ids[i], NULL, (void *)thread_fn,
                            (void *)args) != 0) {
@@ -251,47 +269,56 @@ int main(int argc, char *argv[]) {
         free(index);
       }
       int relaunch = 1;
-      while(1){
-        for (int i = 1; i <= (int)MAX_THREADS; i++){
+      while (1) {
+        // checks for the threads return value
+        for (int i = 1; i <= (int)MAX_THREADS; i++) {
           int j;
-          pthread_join(thread_ids[i], (void*) &j);
-          if(j == 0){ 
+          pthread_join(thread_ids[i], (void *)&j);
+          // 0 means that the file has been read completely
+          if (j == 0) {
             relaunch = 0;
           }
         }
-        if(!relaunch){
+        if (!relaunch) {
           break;
         }
-        else{
+        // if a barrier has been detected relaunch more threads to complete the
+        // parsing of the file
+        else {
           barrier = 0;
           memset(thread_ids, 0, sizeof(thread_ids));
           for (int i = 1; i <= (int)MAX_THREADS; i++) {
             int *index = malloc(sizeof(int));
-            struct Args * args = malloc(sizeof(struct Args));
+            struct Args *args = malloc(sizeof(struct Args));
             *index = i;
             args->fd = fd;
-            args->out_fd =out_fd;
+            args->out_fd = out_fd;
             args->index = *index;
             if (pthread_create(&thread_ids[i], NULL, (void *)thread_fn,
-                              (void *)args) != 0) {
+                               (void *)args) != 0) {
               fprintf(stderr, "Error creating thread.");
               exit(EXIT_FAILURE);
             }
             free(index);
+            free(args);
           }
         }
       }
+      // closes the input and output files
       if (close(fd) < 0 || close(out_fd) < 0) {
         fprintf(stderr, "Close error: %s\n", strerror(errno));
         return -1;
       }
       ems_terminate();
+      // closes the directory
       if (closedir(dirpath) < 0) {
         fprintf(stderr, "Error closing the directory: %s\n", strerror(errno));
       }
       exit(EXIT_SUCCESS);
     }
   }
+  // parent process waits for all child processes to end and prints their end
+  // status
   while (total_child > 0) {
     int pid = wait(&status);
     if (WIFEXITED(status)) {
@@ -302,6 +329,7 @@ int main(int argc, char *argv[]) {
     total_child--;
   }
   ems_terminate();
+  // parent closes the directory
   if (closedir(dirpath) < 0) {
     fprintf(stderr, "Error closing the directory: %s\n", strerror(errno));
   }

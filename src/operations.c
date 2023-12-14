@@ -11,7 +11,10 @@
 static struct EventList *event_list = NULL;
 static unsigned int state_access_delay_ms = 0;
 
+// lock for writing in the output file
 pthread_rwlock_t output_lock;
+
+// mutex to protect the access to an event
 pthread_mutex_t event_lock = PTHREAD_MUTEX_INITIALIZER;
 
 /// Calculates a timespec from a delay in milliseconds.
@@ -131,7 +134,6 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t *xs,
     fprintf(stderr, "EMS state must be initialized\n");
     return 1;
   }
-  
 
   struct Event *event = get_event_with_delay(event_id);
 
@@ -188,7 +190,7 @@ int ems_show(unsigned int event_id, int out_fd) {
     return 1;
   }
   pthread_mutex_unlock(&event_lock);
-  
+
   long int bytes_written;
   pthread_rwlock_rdlock(&event->lock);
   pthread_rwlock_wrlock(&output_lock);
