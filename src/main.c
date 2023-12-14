@@ -52,6 +52,7 @@ int thread_fn(void *arg) {
     // checks if a WAIT has been parsed with the corresponding thread id
     pthread_rwlock_rdlock(&wait_mut);
     if (index == (int)thread_id && delay_thread > 0) {
+      unsigned int delay = delay_thread;
       pthread_rwlock_unlock(&wait_mut);
       printf("Waiting...\n");
       pthread_rwlock_wrlock(&wait_mut);
@@ -59,7 +60,6 @@ int thread_fn(void *arg) {
       pthread_rwlock_unlock(&wait_mut);
       inside_wait = 1;
       pthread_rwlock_rdlock(&wait_mut);
-      unsigned int delay = delay_thread;
       pthread_rwlock_unlock(&wait_mut);
       ems_wait(delay);
     }
@@ -217,7 +217,6 @@ int main(int argc, char *argv[]) {
 
   struct dirent *file;
   unsigned long int child_count = 0;
-  unsigned long int total_child = 0;
   int status;
 
   // reads the files inside the directory
@@ -238,7 +237,6 @@ int main(int argc, char *argv[]) {
       } else {
         fprintf(stdout, "Child process %d exited abnormally", child_pid);
       }
-      total_child--;
       child_count--;
     }
     //creates a new child process
@@ -249,7 +247,6 @@ int main(int argc, char *argv[]) {
       exit(EXIT_FAILURE);
     }
     child_count++;
-    total_child++;
     // child process code
     if (pid == 0) {
       snprintf(file_path, sizeof(file_path), "%s/%s", argv[1], file->d_name);
@@ -333,14 +330,14 @@ int main(int argc, char *argv[]) {
   }
   // parent process waits for all child processes to end and prints their end
   // status
-  while (total_child > 0) {
+  while (child_count > 0) {
     int pid = wait(&status);
     if (WIFEXITED(status)) {
       fprintf(stdout, "Child process %d exited with status: %d\n", pid, status);
     } else {
       fprintf(stdout, "Child process %d exited abnormally", pid);
     }
-    total_child--;
+    child_count--;
   }
   ems_terminate();
   // parent closes the directory
