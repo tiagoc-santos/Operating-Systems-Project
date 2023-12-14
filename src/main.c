@@ -66,6 +66,7 @@ int thread_fn(void *arg) {
     pthread_rwlock_rdlock(&barrier_mut);
     if (barrier) {
       pthread_rwlock_unlock(&barrier_mut);
+      free(args);
       return 1;
     }
     pthread_rwlock_unlock(&barrier_mut);
@@ -161,6 +162,7 @@ int thread_fn(void *arg) {
       barrier = 1;
       pthread_rwlock_unlock(&barrier_mut);
       pthread_mutex_unlock(&file_mutex);
+      free(args);
       return 1;
     case CMD_EMPTY:
       pthread_mutex_unlock(&file_mutex);
@@ -172,6 +174,7 @@ int thread_fn(void *arg) {
       break;
     }
   }
+  free(args);
   return 0;
 }
 
@@ -300,7 +303,6 @@ int main(int argc, char *argv[]) {
               exit(EXIT_FAILURE);
             }
             free(index);
-            free(args);
           }
         }
       }
