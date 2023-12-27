@@ -81,9 +81,9 @@ int main(int argc, char *argv[]) {
   int end = 0;
   while (!end) {
     unsigned int event_id;
-    size_t num_rows, num_columns, num_coords, num_seats;
+    size_t num_rows, num_columns, num_seats;
     size_t xs[MAX_RESERVATION_SIZE], ys[MAX_RESERVATION_SIZE];
-    int status, out_fd;
+    int status;
 
     if (read(req_pipe, &op_code, sizeof(char)) == -1) {
       fprintf(stderr, "Error reading op_code: %s\n", strerror(errno));
@@ -152,7 +152,6 @@ int main(int argc, char *argv[]) {
                 strerror(errno));
         return 1;
       }
-      
       status = ems_show(resp_pipe, event_id);
       if (write(resp_pipe, &status, sizeof(int)) < 0) {
         fprintf(stderr, "Error responding: %s\n", strerror(errno));
@@ -160,7 +159,11 @@ int main(int argc, char *argv[]) {
       }
       break;
     case '6':
-
+      status = ems_list_events(resp_pipe);
+      if(write(resp_pipe, &status, sizeof(int)) < 0){
+        fprintf(stderr, "Error responding: %s\n", strerror(errno));
+        return 1;
+      }
       break;
     }
   }

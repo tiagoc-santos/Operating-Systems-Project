@@ -154,13 +154,30 @@ int ems_show(int out_fd, unsigned int event_id) {
     fprintf(stderr, "Error receiving response: %s\n", strerror(errno));
     return 1;
   }
-  if(read(resp_pipe, seats, sizeof(unsigned int[num_rows][num_cols])) < 0){
-    fprintf(stderr, "Error receiving response: %s\n", strerror(errno));
-    return 1;
-  }
-  for (size_t i = 1; i <= num_rows; i++) {
-    for (size_t j = 1; j <= num_cols; j++) {
-      printf("%u ", seats[i][j]);
+
+  for (size_t i = 0; i < num_rows; i++) {
+    for (size_t j = 0; j < num_cols; j++) {
+      
+      if(read(resp_pipe, &seats[i][j], sizeof(unsigned int)) < 0){
+        fprintf(stderr, "Error receiving response: %s\n", strerror(errno));
+        return 1;
+      }
+
+      if (print_uint(out_fd, seats[i][j])) {
+        perror("Error writing to file descriptor");
+        return 1;
+      }
+
+      if (j < num_cols - 1) {
+        if (print_str(out_fd, " ")) {
+          perror("Error writing to file descriptor");
+          return 1;
+        }
+      }
+    }
+    if (print_str(out_fd, "\n")) {
+        perror("Error writing to file descriptor");
+        return 1;
     }
   }
   int response;
@@ -168,37 +185,20 @@ int ems_show(int out_fd, unsigned int event_id) {
     fprintf(stderr, "Error receiving response: %s\n", strerror(errno));
     return 1;
   }
-  printf("%d", response);
-  return 0;
-  for (size_t i = 0; i < num_rows; i++) {
-    for (size_t j = 0; j < num_cols; j++) {
-      char buffer_show[16];
-      sprintf(buffer_show, "%u", seats[i][j]);
-
-      if (print_str(out_fd, buffer_show)) {
-        perror("Error writing to file descriptor");
-        return 1;
-      }
-
-      if (j < num_cols) {
-        if (print_str(out_fd, " ")) {
-          perror("Error writing to file descriptor");
-          return 1;
-        }
-      }
-    }
-
-    if (print_str(out_fd, "\n")) {
-      perror("Error writing to file descriptor");
-      return 1;
-    }
-  }
   return response; 
 }
   
 
 int ems_list_events(int out_fd) {
-  // TODO: send list request to the server (through the request pipe) and wait
-  // for the response (through the response pipe)
+  char buffer[MAX_BUFFER_SIZE];
+  char op_code = EMS_LIST_CODE;
+  memset(buffer, '\0', sizeof(buffer));
+  memcpy(buffer, &op_code, sizeof(char));
+
+  if (write(req_pipe, buffer, sizeof(buffer)) < 0) {
+    fprintf(stderr, "Error sending show request: %s\n", strerror(errno));
+    return 1;
+  }
+  
   return 1;
 }

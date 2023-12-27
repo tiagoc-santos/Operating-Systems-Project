@@ -3,6 +3,7 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 #include "common/io.h"
 #include "eventlist.h"
@@ -219,28 +220,11 @@ int ems_show(int out_fd, unsigned int event_id) {
   }
   for (size_t i = 1; i <= event->rows; i++) {
     for (size_t j = 1; j <= event->cols; j++) {
-      char buffer[16];
-      sprintf(buffer, "%u", event->data[seat_index(event, i, j)]);
-
-      if (print_str(out_fd, buffer)) {
+      if (write(out_fd, &(event->data[seat_index(event, i, j)]), sizeof(unsigned int)) < 0) {
         perror("Error writing to file descriptor");
         pthread_mutex_unlock(&event->mutex);
         return 1;
       }
-
-      if (j < event->cols) {
-        if (print_str(out_fd, " ")) {
-          perror("Error writing to file descriptor");
-          pthread_mutex_unlock(&event->mutex);
-          return 1;
-        }
-      }
-    }
-
-    if (print_str(out_fd, "\n")) {
-      perror("Error writing to file descriptor");
-      pthread_mutex_unlock(&event->mutex);
-      return 1;
     }
   }
 
