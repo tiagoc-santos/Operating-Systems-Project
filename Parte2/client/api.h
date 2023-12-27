@@ -8,7 +8,8 @@
 /// @param resp_pipe_path Path to the name pipe to be created for responses.
 /// @param server_pipe_path Path to the name pipe where the server is listening.
 /// @return 0 if the connection was established successfully, 1 otherwise.
-int ems_setup(char const* req_pipe_path, char const* resp_pipe_path, char const* server_pipe_path);
+int ems_setup(char const *req_pipe_path, char const *resp_pipe_path,
+              char const *server_pipe_path);
 
 /// Disconnects from an EMS server.
 /// @return 0 in case of success, 1 otherwise.
@@ -27,7 +28,8 @@ int ems_create(unsigned int event_id, size_t num_rows, size_t num_cols);
 /// @param xs Array of rows of the seats to reserve.
 /// @param ys Array of columns of the seats to reserve.
 /// @return 0 if the reservation was created successfully, 1 otherwise.
-int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys);
+int ems_reserve(unsigned int event_id, size_t num_seats, size_t *xs,
+                size_t *ys);
 
 /// Prints the given event to the given file.
 /// @param out_fd File descriptor to print the event to.
@@ -40,4 +42,4 @@ int ems_show(int out_fd, unsigned int event_id);
 /// @return 0 if the events were printed successfully, 1 otherwise.
 int ems_list_events(int out_fd);
 
-#endif  // CLIENT_API_H
+#endif // CLIENT_API_H
