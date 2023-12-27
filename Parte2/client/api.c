@@ -1,10 +1,10 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <string.h>
 
 #include "api.h"
 #include "common/constants.h"
@@ -43,8 +43,7 @@ int ems_setup(char const *req_pipe_path, char const *resp_pipe_path,
   char buffer[MAX_BUFFER_SIZE];
   memcpy(buffer, &op_code, sizeof(char));
   memcpy(buffer + sizeof(char), _req_pipe_path, sizeof(_req_pipe_path));
-  memcpy(buffer + sizeof(char) + sizeof(_req_pipe_path), _resp_pipe_path,
-         sizeof(_resp_pipe_path));
+  memcpy(buffer + sizeof(char) + sizeof(_req_pipe_path), _resp_pipe_path, sizeof(_resp_pipe_path));
   if (write(server_pipe, buffer, sizeof(buffer)) < 0) {
     fprintf(stderr, "Server communication failed: %s:", strerror(errno));
     return 1;
@@ -116,13 +115,9 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t *xs,
   memset(buffer, '\0', sizeof(buffer));
   memcpy(buffer, &op_code, sizeof(char));
   memcpy(buffer + sizeof(char), &event_id, sizeof(unsigned int));
-  memcpy(buffer + sizeof(char) + sizeof(unsigned int), &num_seats,
-         sizeof(size_t));
-  memcpy(buffer + sizeof(char) + sizeof(unsigned int) + sizeof(size_t), xs,
-         sizeof(size_t[num_seats]));
-  memcpy(buffer + sizeof(char) + sizeof(unsigned int) + sizeof(size_t) +
-             sizeof(size_t[num_seats]),
-         ys, sizeof(size_t[num_seats]));
+  memcpy(buffer + sizeof(char) + sizeof(unsigned int), &num_seats, sizeof(size_t));
+  memcpy(buffer + sizeof(char) + sizeof(unsigned int) + sizeof(size_t), xs, sizeof(size_t[num_seats]));
+  memcpy(buffer + sizeof(char) + sizeof(unsigned int) + sizeof(size_t) + sizeof(size_t[num_seats]), ys, sizeof(size_t[num_seats]));
 
   if (write(req_pipe, buffer, sizeof(buffer)) < 0) {
     fprintf(stderr, "Error sending reserve request: %s\n", strerror(errno));
@@ -136,31 +131,71 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t *xs,
   return response;
 }
 
-int ems_show(int out_fd, unsigned int event_id) { return 1; }
-char buffer[MAX_BUFFER_SIZE];
-char op_code = EMS_RESERVE_CODE;
+int ems_show(int out_fd, unsigned int event_id) { 
+  char buffer[MAX_BUFFER_SIZE];
+  char op_code = EMS_SHOW_CODE;
 
-memset(buffer, '\0', sizeof(buffer));
-memcpy(buffer, &op_code, sizeof(char));
-memcpy(buffer + sizeof(char), &event_id, sizeof(unsigned int));
-memcpy(buffer + sizeof(char) + sizeof(unsigned int), &num_seats,
-       sizeof(size_t));
-memcpy(buffer + sizeof(char) + sizeof(unsigned int) + sizeof(size_t), xs,
-       sizeof(size_t[num_seats]));
-memcpy(buffer + sizeof(char) + sizeof(unsigned int) + sizeof(size_t) +
-           sizeof(size_t[num_seats]),
-       ys, sizeof(size_t[num_seats]));
+  memset(buffer, '\0', sizeof(buffer));
+  memcpy(buffer, &op_code, sizeof(char));
+  memcpy(buffer + sizeof(char), &event_id, sizeof(unsigned int));
 
-if (write(req_pipe, buffer, sizeof(buffer)) < 0) {
-  fprintf(stderr, "Error sending reserve request: %s\n", strerror(errno));
-  return 1;
+  if (write(req_pipe, buffer, sizeof(buffer)) < 0) {
+    fprintf(stderr, "Error sending show request: %s\n", strerror(errno));
+    return 1;
+  }
+
+  size_t num_rows, num_cols;
+  unsigned int seats[num_rows][num_cols];
+  if(read(resp_pipe, &num_rows, sizeof(size_t)) < 0){
+    fprintf(stderr, "Error receiving response: %s\n", strerror(errno));
+    return 1;
+  }
+  if(read(resp_pipe, &num_cols, sizeof(size_t)) < 0){
+    fprintf(stderr, "Error receiving response: %s\n", strerror(errno));
+    return 1;
+  }
+  if(read(resp_pipe, seats, sizeof(unsigned int[num_rows][num_cols])) < 0){
+    fprintf(stderr, "Error receiving response: %s\n", strerror(errno));
+    return 1;
+  }
+  for (size_t i = 1; i <= num_rows; i++) {
+    for (size_t j = 1; j <= num_cols; j++) {
+      printf("%u ", seats[i][j]);
+    }
+  }
+  int response;
+  if (read(resp_pipe, &response, sizeof(int)) < 0) {
+    fprintf(stderr, "Error receiving response: %s\n", strerror(errno));
+    return 1;
+  }
+  printf("%d", response);
+  return 0;
+  for (size_t i = 0; i < num_rows; i++) {
+    for (size_t j = 0; j < num_cols; j++) {
+      char buffer_show[16];
+      sprintf(buffer_show, "%u", seats[i][j]);
+
+      if (print_str(out_fd, buffer_show)) {
+        perror("Error writing to file descriptor");
+        return 1;
+      }
+
+      if (j < num_cols) {
+        if (print_str(out_fd, " ")) {
+          perror("Error writing to file descriptor");
+          return 1;
+        }
+      }
+    }
+
+    if (print_str(out_fd, "\n")) {
+      perror("Error writing to file descriptor");
+      return 1;
+    }
+  }
+  return response; 
 }
-int response;
-if (read(resp_pipe, &response, sizeof(int)) < 0) {
-  fprintf(stderr, "Error receiving response: %s\n", strerror(errno));
-  return 1;
-}
-return response;
+  
 
 int ems_list_events(int out_fd) {
   // TODO: send list request to the server (through the request pipe) and wait

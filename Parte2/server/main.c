@@ -147,7 +147,17 @@ int main(int argc, char *argv[]) {
       break;
 
     case '5':
-
+      if(read(req_pipe, &event_id, sizeof(unsigned int)) < 0){
+        fprintf(stderr, "Error reading from request pipe: %s\n",
+                strerror(errno));
+        return 1;
+      }
+      
+      status = ems_show(resp_pipe, event_id);
+      if (write(resp_pipe, &status, sizeof(int)) < 0) {
+        fprintf(stderr, "Error responding: %s\n", strerror(errno));
+        return 1;
+      }
       break;
     case '6':
 
