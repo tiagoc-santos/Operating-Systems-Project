@@ -39,7 +39,6 @@ int ems_setup(char const *req_pipe_path, char const *resp_pipe_path,
   memset(_resp_pipe_path, 0, PIPE_NAME_SIZE);
   strcpy(_req_pipe_path, req_pipe_path);
   strcpy(_resp_pipe_path, resp_pipe_path);
-
   char buffer[MAX_BUFFER_SIZE];
   memcpy(buffer, &op_code, sizeof(char));
   memcpy(buffer + sizeof(char), _req_pipe_path, sizeof(_req_pipe_path));
@@ -49,17 +48,17 @@ int ems_setup(char const *req_pipe_path, char const *resp_pipe_path,
     return 1;
   }
   close(server_pipe);
-  req_pipe = open(_req_pipe_path, O_WRONLY);
-  if (resp_pipe == -1) {
-    fprintf(stderr, "Server communication failed: %s:", strerror(errno));
-    return 1;
-  }
   resp_pipe = open(_resp_pipe_path, O_RDONLY);
   if (resp_pipe == -1) {
     fprintf(stderr, "Server communication failed: %s:", strerror(errno));
     return 1;
   }
   if (read(resp_pipe, &session_id, sizeof(int)) == -1) {
+    fprintf(stderr, "Server communication failed: %s:", strerror(errno));
+    return 1;
+  }
+  req_pipe = open(_req_pipe_path, O_WRONLY);
+  if (resp_pipe == -1) {
     fprintf(stderr, "Server communication failed: %s:", strerror(errno));
     return 1;
   }

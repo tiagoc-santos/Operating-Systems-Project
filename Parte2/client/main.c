@@ -20,7 +20,6 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "Failed to set up EMS\n");
     return 1;
   }
-
   const char *dot = strrchr(argv[4], '.');
   if (dot == NULL || dot == argv[4] || strlen(dot) != 5 ||
       strcmp(dot, ".jobs") || strlen(argv[4]) > MAX_JOB_FILE_NAME_SIZE) {
