@@ -159,26 +159,28 @@ int ems_show(int out_fd, unsigned int event_id) {
     for (size_t j = 0; j < num_cols; j++) {
       
       if(read(resp_pipe, &seats[i][j], sizeof(unsigned int)) < 0){
-        fprintf(stderr, "Error receiving response: %s\n", strerror(errno));
+        fprintf(stderr, "Error while reading seat: %s\n", strerror(errno));
         return 1;
       }
 
       if (print_uint(out_fd, seats[i][j])) {
-        perror("Error writing to file descriptor");
+        perror("Error while writing seat");
         return 1;
       }
 
       if (j < num_cols - 1) {
         if (print_str(out_fd, " ")) {
-          perror("Error writing to file descriptor");
+          perror("Error while writing space character");
           return 1;
         }
       }
     }
+    
     if (print_str(out_fd, "\n")) {
-        perror("Error writing to file descriptor");
+        perror("Error while writing new line");
         return 1;
     }
+    
   }
   int response;
   if (read(resp_pipe, &response, sizeof(int)) < 0) {
@@ -192,13 +194,55 @@ int ems_show(int out_fd, unsigned int event_id) {
 int ems_list_events(int out_fd) {
   char buffer[MAX_BUFFER_SIZE];
   char op_code = EMS_LIST_CODE;
+  size_t num_events;
+  int response;
   memset(buffer, '\0', sizeof(buffer));
   memcpy(buffer, &op_code, sizeof(char));
 
   if (write(req_pipe, buffer, sizeof(buffer)) < 0) {
-    fprintf(stderr, "Error sending show request: %s\n", strerror(errno));
+    fprintf(stderr, "Error sending list request: %s\n", strerror(errno));
     return 1;
   }
+  if(read(resp_pipe, &num_events, sizeof(size_t)) < 0){
+    fprintf(stderr, "Error reading number of events: %s\n", strerror(errno));
+    return 1;
+  }
+
+  if(num_events == 0){
+    char buff[] = "No events\n";
+    if (print_str(out_fd, buff)) {
+      perror("Error writing to file descriptor");
+      return 1;
+    }
+    if (read(resp_pipe, &response, sizeof(int)) < 0) {
+      fprintf(stderr, "Error receiving response: %s\n", strerror(errno));
+      return 1;
+    }
+    return response;
+  }
+  unsigned int ids[num_events];
+  for(size_t i = 0; i < num_events; i++){
+    if(read(resp_pipe, &ids[i], sizeof(unsigned int)) < 0){
+      fprintf(stderr, "Error receiving event ids: %s\n", strerror(errno));
+      return 1;
+    }
+  }
   
-  return 1;
+  for(size_t i = 0; i < num_events; i++){
+    if(print_uint(out_fd, ids[i])){
+      perror("Error while writing event's id");
+      return 1;
+    }
+    
+    if (print_str(out_fd, "\n")) {
+        perror("Error writing to file descriptor");
+        return 1;
+    }
+    
+  }
+  if (read(resp_pipe, &response, sizeof(int)) < 0) {
+      fprintf(stderr, "Error receiving response: %s\n", strerror(errno));
+      return 1;
+  }
+  return response;
 }
