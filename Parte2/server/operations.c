@@ -1,9 +1,9 @@
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
-#include <fcntl.h>
 
 #include "common/io.h"
 #include "eventlist.h"
@@ -208,19 +208,20 @@ int ems_show(int out_fd, unsigned int event_id) {
     fprintf(stderr, "Error locking mutex\n");
     return 1;
   }
-  if(write(out_fd, &(event->rows), sizeof(size_t)) < 0){
+  if (write(out_fd, &(event->rows), sizeof(size_t)) < 0) {
     perror("Error writing to file descriptor");
     pthread_mutex_unlock(&event->mutex);
     return 1;
   }
-  if(write(out_fd, &(event->cols), sizeof(size_t)) < 0){
+  if (write(out_fd, &(event->cols), sizeof(size_t)) < 0) {
     perror("Error writing to file descriptor");
     pthread_mutex_unlock(&event->mutex);
     return 1;
   }
   for (size_t i = 1; i <= event->rows; i++) {
     for (size_t j = 1; j <= event->cols; j++) {
-      if (write(out_fd, &(event->data[seat_index(event, i, j)]), sizeof(unsigned int)) < 0) {
+      if (write(out_fd, &(event->data[seat_index(event, i, j)]),
+                sizeof(unsigned int)) < 0) {
         perror("Error writing to file descriptor");
         pthread_mutex_unlock(&event->mutex);
         return 1;
@@ -263,7 +264,7 @@ int ems_list_events(int out_fd) {
     }
     current = current->next;
   }
-  if(write(out_fd, &num_events, sizeof(size_t)) < 0){
+  if (write(out_fd, &num_events, sizeof(size_t)) < 0) {
     perror("Error writing to file descriptor");
     pthread_rwlock_unlock(&event_list->rwl);
     return 1;

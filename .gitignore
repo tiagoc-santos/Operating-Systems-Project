@@ -6,3 +6,4 @@ ems
 *.jobs
 .vscode
 client
+*.bash

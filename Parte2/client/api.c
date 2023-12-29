@@ -12,13 +12,12 @@
 
 int session_id = 0;
 int resp_pipe, req_pipe;
+char _req_pipe_path[PIPE_NAME_SIZE], _resp_pipe_path[PIPE_NAME_SIZE];
 
 int ems_setup(char const *req_pipe_path, char const *resp_pipe_path,
               char const *server_pipe_path) {
 
   char op_code = EMS_SETUP_CODE;
-  char _req_pipe_path[PIPE_NAME_SIZE];
-  char _resp_pipe_path[PIPE_NAME_SIZE];
 
   if ((unlink(req_pipe_path) != 0 || unlink(resp_pipe_path) != 0) &&
       errno != ENOENT) {
@@ -42,7 +41,8 @@ int ems_setup(char const *req_pipe_path, char const *resp_pipe_path,
   char buffer[MAX_BUFFER_SIZE];
   memcpy(buffer, &op_code, sizeof(char));
   memcpy(buffer + sizeof(char), _req_pipe_path, sizeof(_req_pipe_path));
-  memcpy(buffer + sizeof(char) + sizeof(_req_pipe_path), _resp_pipe_path, sizeof(_resp_pipe_path));
+  memcpy(buffer + sizeof(char) + sizeof(_req_pipe_path), _resp_pipe_path,
+         sizeof(_resp_pipe_path));
   if (write(server_pipe, buffer, sizeof(buffer)) < 0) {
     fprintf(stderr, "Server communication failed: %s:", strerror(errno));
     return 1;
@@ -58,7 +58,7 @@ int ems_setup(char const *req_pipe_path, char const *resp_pipe_path,
     return 1;
   }
   req_pipe = open(_req_pipe_path, O_WRONLY);
-  if (resp_pipe == -1) {
+  if (req_pipe == -1) {
     fprintf(stderr, "Server communication failed: %s:", strerror(errno));
     return 1;
   }
@@ -70,7 +70,7 @@ int ems_quit(void) {
   char op_code = EMS_QUIT_CODE;
   memcpy(buffer, &op_code, sizeof(char));
   memcpy(buffer + sizeof(char), &session_id, sizeof(int));
-  if (print_str(req_pipe, buffer)) {
+  if (write(req_pipe, buffer, sizeof(buffer)) < 0) {
     fprintf(stderr, "Error sending quit request: %s\n", strerror(errno));
     return 1;
   }
@@ -79,6 +79,12 @@ int ems_quit(void) {
             strerror(errno));
     return 1;
   }
+  if ((unlink(_req_pipe_path) != 0 || unlink(_resp_pipe_path) != 0) &&
+      errno != ENOENT) {
+    fprintf(stderr, "Unlink failed: %s\n", strerror(errno));
+    return 1;
+  }
+  printf("%d\n", session_id);
   return 0;
 }
 
@@ -88,10 +94,12 @@ int ems_create(unsigned int event_id, size_t num_rows, size_t num_cols) {
 
   memset(buffer, '\0', sizeof(buffer));
   memcpy(buffer, &op_code, sizeof(char));
-  memcpy(buffer + sizeof(char), &event_id, sizeof(unsigned int));
-  memcpy(buffer + sizeof(char) + sizeof(unsigned int), &num_rows,
+  memcpy(buffer + sizeof(char), &session_id, sizeof(int));
+  memcpy(buffer + sizeof(char) + sizeof(int), &event_id, sizeof(unsigned int));
+  memcpy(buffer + sizeof(char) + sizeof(int) + sizeof(unsigned int), &num_rows,
          sizeof(size_t));
-  memcpy(buffer + sizeof(char) + sizeof(unsigned int) + sizeof(size_t),
+  memcpy(buffer + sizeof(char) + sizeof(int) + sizeof(unsigned int) +
+             sizeof(size_t),
          &num_cols, sizeof(size_t));
 
   if (write(req_pipe, buffer, sizeof(buffer)) < 0) {
@@ -113,10 +121,16 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t *xs,
 
   memset(buffer, '\0', sizeof(buffer));
   memcpy(buffer, &op_code, sizeof(char));
-  memcpy(buffer + sizeof(char), &event_id, sizeof(unsigned int));
-  memcpy(buffer + sizeof(char) + sizeof(unsigned int), &num_seats, sizeof(size_t));
-  memcpy(buffer + sizeof(char) + sizeof(unsigned int) + sizeof(size_t), xs, sizeof(size_t[num_seats]));
-  memcpy(buffer + sizeof(char) + sizeof(unsigned int) + sizeof(size_t) + sizeof(size_t[num_seats]), ys, sizeof(size_t[num_seats]));
+  memcpy(buffer + sizeof(char), &session_id, sizeof(int));
+  memcpy(buffer + sizeof(char) + sizeof(int), &event_id, sizeof(unsigned int));
+  memcpy(buffer + sizeof(char) + sizeof(int) + sizeof(unsigned int), &num_seats,
+         sizeof(size_t));
+  memcpy(buffer + sizeof(char) + sizeof(int) + sizeof(unsigned int) +
+             sizeof(size_t),
+         xs, sizeof(size_t[num_seats]));
+  memcpy(buffer + sizeof(char) + sizeof(int) + sizeof(unsigned int) +
+             sizeof(size_t) + sizeof(size_t[num_seats]),
+         ys, sizeof(size_t[num_seats]));
 
   if (write(req_pipe, buffer, sizeof(buffer)) < 0) {
     fprintf(stderr, "Error sending reserve request: %s\n", strerror(errno));
@@ -130,13 +144,14 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t *xs,
   return response;
 }
 
-int ems_show(int out_fd, unsigned int event_id) { 
+int ems_show(int out_fd, unsigned int event_id) {
   char buffer[MAX_BUFFER_SIZE];
   char op_code = EMS_SHOW_CODE;
 
   memset(buffer, '\0', sizeof(buffer));
   memcpy(buffer, &op_code, sizeof(char));
-  memcpy(buffer + sizeof(char), &event_id, sizeof(unsigned int));
+  memcpy(buffer + sizeof(char), &session_id, sizeof(int));
+  memcpy(buffer + sizeof(char) + sizeof(int), &event_id, sizeof(unsigned int));
 
   if (write(req_pipe, buffer, sizeof(buffer)) < 0) {
     fprintf(stderr, "Error sending show request: %s\n", strerror(errno));
@@ -145,19 +160,19 @@ int ems_show(int out_fd, unsigned int event_id) {
 
   size_t num_rows, num_cols;
   unsigned int seats[num_rows][num_cols];
-  if(read(resp_pipe, &num_rows, sizeof(size_t)) < 0){
+  if (read(resp_pipe, &num_rows, sizeof(size_t)) < 0) {
     fprintf(stderr, "Error receiving response: %s\n", strerror(errno));
     return 1;
   }
-  if(read(resp_pipe, &num_cols, sizeof(size_t)) < 0){
+  if (read(resp_pipe, &num_cols, sizeof(size_t)) < 0) {
     fprintf(stderr, "Error receiving response: %s\n", strerror(errno));
     return 1;
   }
 
   for (size_t i = 0; i < num_rows; i++) {
     for (size_t j = 0; j < num_cols; j++) {
-      
-      if(read(resp_pipe, &seats[i][j], sizeof(unsigned int)) < 0){
+
+      if (read(resp_pipe, &seats[i][j], sizeof(unsigned int)) < 0) {
         fprintf(stderr, "Error while reading seat: %s\n", strerror(errno));
         return 1;
       }
@@ -174,21 +189,19 @@ int ems_show(int out_fd, unsigned int event_id) {
         }
       }
     }
-    
+
     if (print_str(out_fd, "\n")) {
-        perror("Error while writing new line");
-        return 1;
+      perror("Error while writing new line");
+      return 1;
     }
-    
   }
   int response;
   if (read(resp_pipe, &response, sizeof(int)) < 0) {
     fprintf(stderr, "Error receiving response: %s\n", strerror(errno));
     return 1;
   }
-  return response; 
+  return response;
 }
-  
 
 int ems_list_events(int out_fd) {
   char buffer[MAX_BUFFER_SIZE];
@@ -197,17 +210,18 @@ int ems_list_events(int out_fd) {
   int response;
   memset(buffer, '\0', sizeof(buffer));
   memcpy(buffer, &op_code, sizeof(char));
+  memcpy(buffer + sizeof(char), &session_id, sizeof(int));
 
   if (write(req_pipe, buffer, sizeof(buffer)) < 0) {
     fprintf(stderr, "Error sending list request: %s\n", strerror(errno));
     return 1;
   }
-  if(read(resp_pipe, &num_events, sizeof(size_t)) < 0){
+  if (read(resp_pipe, &num_events, sizeof(size_t)) < 0) {
     fprintf(stderr, "Error reading number of events: %s\n", strerror(errno));
     return 1;
   }
 
-  if(num_events == 0){
+  if (num_events == 0) {
     char buff[] = "No events\n";
     if (print_str(out_fd, buff)) {
       perror("Error writing to file descriptor");
@@ -220,28 +234,27 @@ int ems_list_events(int out_fd) {
     return response;
   }
   unsigned int ids[num_events];
-  for(size_t i = 0; i < num_events; i++){
-    if(read(resp_pipe, &ids[i], sizeof(unsigned int)) < 0){
+  for (size_t i = 0; i < num_events; i++) {
+    if (read(resp_pipe, &ids[i], sizeof(unsigned int)) < 0) {
       fprintf(stderr, "Error receiving event ids: %s\n", strerror(errno));
       return 1;
     }
   }
-  
-  for(size_t i = 0; i < num_events; i++){
-    if(print_uint(out_fd, ids[i])){
+
+  for (size_t i = 0; i < num_events; i++) {
+    if (print_uint(out_fd, ids[i])) {
       perror("Error while writing event's id");
       return 1;
     }
-    
+
     if (print_str(out_fd, "\n")) {
-        perror("Error writing to file descriptor");
-        return 1;
+      perror("Error writing to file descriptor");
+      return 1;
     }
-    
   }
   if (read(resp_pipe, &response, sizeof(int)) < 0) {
-      fprintf(stderr, "Error receiving response: %s\n", strerror(errno));
-      return 1;
+    fprintf(stderr, "Error receiving response: %s\n", strerror(errno));
+    return 1;
   }
   return response;
 }
