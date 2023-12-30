@@ -47,7 +47,10 @@ int ems_setup(char const *req_pipe_path, char const *resp_pipe_path,
     fprintf(stderr, "Server communication failed: %s:", strerror(errno));
     return 1;
   }
-  close(server_pipe);
+  if(close(server_pipe) < 0){
+    fprintf(stderr, "Error closing server pipe: %s\n", strerror(errno));
+    return 1;
+  }
   resp_pipe = open(_resp_pipe_path, O_RDONLY);
   if (resp_pipe == -1) {
     fprintf(stderr, "Server communication failed: %s:", strerror(errno));
@@ -84,7 +87,6 @@ int ems_quit(void) {
     fprintf(stderr, "Unlink failed: %s\n", strerror(errno));
     return 1;
   }
-  printf("%d\n", session_id);
   return 0;
 }
 
