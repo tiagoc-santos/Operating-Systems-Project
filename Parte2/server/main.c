@@ -2,27 +2,28 @@
 #include <fcntl.h>
 #include <limits.h>
 #include <pthread.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <signal.h>
 
 #include "common/constants.h"
 #include "common/io.h"
 #include "operations.h"
 
-typedef struct msg{
+typedef struct msg {
   char _req_pipe_path[40];
   char _resp_pipe_path[40];
   int _session_id;
-}msg;
+} msg;
 
 size_t num_sessions = 0, count = 0;
 unsigned int mainth_pntr = 0, wkth_pntr = 0;
-int session_ids[MAX_SESSION_COUNT], sigusr1 = 0;;
+int session_ids[MAX_SESSION_COUNT], sigusr1 = 0;
+;
 msg buffer[MAX_MSG];
 pthread_mutex_t buffer_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t session_ids_mutex = PTHREAD_MUTEX_INITIALIZER;
@@ -31,17 +32,18 @@ pthread_cond_t canRead = PTHREAD_COND_INITIALIZER,
                canWrite = PTHREAD_COND_INITIALIZER,
                num_session_cond = PTHREAD_COND_INITIALIZER;
 
-void sigusr1_handler(int sig){
-  if(sig == SIGUSR1)
+void sigusr1_handler(int sig) {
+  if (sig == SIGUSR1)
     sigusr1 = 1;
 }
 
 void *thread_fn() {
-  sigset_t set;
-  sigemptyset(&set);
-  sigaddset(&set, SIGUSR1);
-  pthread_sigmask(SIG_BLOCK, &set, NULL);
   while (1) {
+    sigset_t set;
+    sigemptyset(&set);
+    sigaddset(&set, SIGUSR1);
+    pthread_sigmask(SIG_BLOCK, &set, NULL);
+    signal(SIGPIPE, SIG_IGN);
     unsigned int event_id;
     msg message;
     size_t num_rows, num_columns, num_seats;
@@ -50,7 +52,9 @@ void *thread_fn() {
     char op_code, req_pipe_path[PIPE_NAME_SIZE], resp_pipe_path[PIPE_NAME_SIZE];
 
     // read request from consumer-producer buffer
-    pthread_mutex_lock(&buffer_mutex);
+    if (pthread_mutex_lock(&buffer_mutex) != 0) {
+      fprintf(stderr, "Error locking mutex: %s\n", strerror(errno));
+    }
     while (count <= 0) {
       pthread_cond_wait(&canRead, &buffer_mutex);
     }
@@ -63,35 +67,42 @@ void *thread_fn() {
     pthread_cond_signal(&canWrite);
     pthread_mutex_unlock(&buffer_mutex);
 
-    memcpy(req_pipe_path, message._req_pipe_path, sizeof(message._req_pipe_path));
-    memcpy(resp_pipe_path, message._resp_pipe_path, sizeof(message._resp_pipe_path));
+    memcpy(req_pipe_path, message._req_pipe_path,
+           sizeof(message._req_pipe_path));
+    memcpy(resp_pipe_path, message._resp_pipe_path,
+           sizeof(message._resp_pipe_path));
     session_id = message._session_id;
-    
+
     resp_pipe = open(resp_pipe_path, O_WRONLY);
     if (resp_pipe == -1) {
       fprintf(stderr, "Error opening response pipe: %s\n", strerror(errno));
-      if (close(req_pipe) < 0) {
-        fprintf(stderr, "Error closing request pipe: %s\n", strerror(errno));
-      }
       continue;
     }
-    if(write(resp_pipe, &session_id, sizeof(int)) < 0){
-      fprintf(stderr, "Error sending session id: %s\n", strerror(errno));
-      if (close(req_pipe) < 0) {
-        fprintf(stderr, "Error closing request pipe: %s\n", strerror(errno));
+
+    // communicates the session id to the client proccess
+    if (write(resp_pipe, &session_id, sizeof(int)) < 0) {
+      if (errno == SIGPIPE) {
+        fprintf(stderr, "Response pipe: %s no longer exists\n", resp_pipe_path);
+        continue;
+      } else {
+        fprintf(stderr, "Error sending session id: %s\n", strerror(errno));
+        continue;
       }
-      continue;
     }
     req_pipe = open(req_pipe_path, O_RDONLY);
     if (req_pipe == -1) {
       fprintf(stderr, "Error opening request pipe: %s\n", strerror(errno));
+      if (close(resp_pipe) < 0) { // attemps to close response pipe
+        fprintf(stderr, "Error closing response pipe: %s\n", strerror(errno));
+      }
       continue;
     }
     int end = 0;
     while (!end) {
+      // attemps to read the message op_code
       if (read(req_pipe, &op_code, sizeof(char)) == -1) {
+        // in case of error discards the client
         fprintf(stderr, "Error reading op_code: %s\n", strerror(errno));
-        end = 1;
         break;
       }
       switch (op_code) {
@@ -165,8 +176,12 @@ void *thread_fn() {
           break;
         }
         status = ems_reserve(event_id, num_seats, xs, ys);
-        if (write(resp_pipe, &status, sizeof(int)) < 0 && errno == EPIPE) {
-          fprintf(stderr, "Error responding: %s\n", strerror(errno));
+        if (write(resp_pipe, &status, sizeof(int)) < 0) {
+          if (errno == EPIPE) {
+            fprintf(stderr, "Response pipe no longer exists");
+          } else {
+            fprintf(stderr, "Error responding: %s\n", strerror(errno));
+          }
           end = 1;
         }
         break;
@@ -184,8 +199,13 @@ void *thread_fn() {
           break;
         }
         status = ems_show(resp_pipe, event_id);
-        if (write(resp_pipe, &status, sizeof(int)) < 0 && errno == EPIPE) {
-          fprintf(stderr, "Error responding: %s\n", strerror(errno));
+        if (write(resp_pipe, &status, sizeof(int)) < 0) {
+          if (errno == EPIPE) {
+            fprintf(stderr, "Response pipe:%s no longer exists\n",
+                    resp_pipe_path);
+          } else {
+            fprintf(stderr, "Error responding: %s\n", strerror(errno));
+          }
           end = 1;
         }
         break;
@@ -197,19 +217,28 @@ void *thread_fn() {
           break;
         }
         status = ems_list_events(resp_pipe);
-        if (write(resp_pipe, &status, sizeof(int)) < 0 && errno == EPIPE) {
-          fprintf(stderr, "Error responding: %s\n", strerror(errno));
+        if (write(resp_pipe, &status, sizeof(int)) < 0) {
+          if (errno == EPIPE) {
+            fprintf(stderr, "Response pipe:%s no longer exists\n",
+                    resp_pipe_path);
+          } else {
+            fprintf(stderr, "Error responding: %s\n", strerror(errno));
+          }
           end = 1;
         }
         break;
       }
     }
+    // attemps to close the client's comminication channels
     if (close(resp_pipe) < 0 || close(req_pipe) < 0) {
       fprintf(stderr, "Error closing response/request pipe: %s\n",
               strerror(errno));
-      pthread_exit((void *)EXIT_FAILURE);
     }
-    pthread_mutex_lock(&num_session_mutex);
+    // updates current number of sessions
+    if (pthread_mutex_lock(&num_session_mutex) != 0) {
+      fprintf(stderr, "Error locking mutex: %s\n", strerror(errno));
+      continue;
+    }
     session_ids[session_id] = 0;
     num_sessions--;
     pthread_cond_signal(&num_session_cond);
@@ -222,7 +251,7 @@ int main(int argc, char *argv[]) {
   sa.sa_handler = sigusr1_handler;
   sigemptyset(&sa.sa_mask);
   sa.sa_flags = 0;
-  if(sigaction(SIGUSR1, &sa, NULL) == -1){
+  if (sigaction(SIGUSR1, &sa, NULL) == -1) {
     fprintf(stderr, "Error setting SIGUSR1 handler: %s\n", strerror(errno));
     return 1;
   }
@@ -243,6 +272,7 @@ int main(int argc, char *argv[]) {
 
     state_access_delay_us = (unsigned int)delay;
   }
+
   memset(session_ids, 0, sizeof(session_ids));
   if (ems_init(state_access_delay_us)) {
     fprintf(stderr, "Failed to initialize EMS\n");
@@ -265,45 +295,51 @@ int main(int argc, char *argv[]) {
       exit(EXIT_FAILURE);
     }
   }
+
   int server_pipe;
   while (1) {
     signal(SIGPIPE, SIG_IGN);
-    while(!sigusr1){
+    while (!sigusr1) {
       char op_code;
-      if((server_pipe = open(argv[1], O_RDONLY)) == -1 ) {
-        if(errno == EINTR){
+      if ((server_pipe = open(argv[1], O_RDONLY)) == -1) {
+        if (errno == EINTR) {
           server_pipe = open(argv[1], O_RDONLY);
-        }
-        else{
+        } 
+        else {
           fprintf(stderr, "Error opening server pipe: %s\n", strerror(errno));
           return 1;
-        } 
+        }
       }
-      pthread_mutex_lock(&num_session_mutex);
+      //checks if the number of sessions hasn't exceeded the maximum allowed
+      if (pthread_mutex_lock(&num_session_mutex) != 0) {
+        fprintf(stderr, "Error locking mutex:%s\n", strerror(errno));
+      }
       while (num_sessions == MAX_SESSION_COUNT) {
         pthread_cond_wait(&num_session_cond, &num_session_mutex);
       }
       pthread_mutex_unlock(&num_session_mutex);
+
       if (read(server_pipe, &op_code, sizeof(char)) == -1) {
-        if(errno == EINTR){
+        if (errno == EINTR) {
           read(server_pipe, &op_code, sizeof(char));
-        }
-        else{
+        } 
+        else {
           fprintf(stderr, "Error reading op_code: %s\n", strerror(errno));
           if (close(server_pipe) < 0) {
             fprintf(stderr, "Error closing server pipe: %s\n", strerror(errno));
             return 1;
           }
           continue;
-        }        
+        }
       }
       char req_pipe_path[PIPE_NAME_SIZE], resp_pipe_path[PIPE_NAME_SIZE];
       if (read(server_pipe, req_pipe_path, PIPE_NAME_SIZE) == -1) {
-        if(errno == EINTR){
+        if (errno == EINTR) {
           read(server_pipe, req_pipe_path, PIPE_NAME_SIZE);
-        }
-        else{
-          fprintf(stderr, "Error reading request pipe name: %s\n", strerror(errno));
+        } 
+        else {
+          fprintf(stderr, "Error reading request pipe name: %s\n",
+                  strerror(errno));
           if (close(server_pipe) < 0) {
             fprintf(stderr, "Error closing server pipe: %s\n", strerror(errno));
             return 1;
@@ -312,12 +348,12 @@ int main(int argc, char *argv[]) {
         }
       }
       if (read(server_pipe, resp_pipe_path, PIPE_NAME_SIZE) == -1) {
-        if(errno == EINTR){
+        if (errno == EINTR) {
           read(server_pipe, resp_pipe_path, PIPE_NAME_SIZE);
-        }
-        else{
+        } 
+        else {
           fprintf(stderr, "Error reading response pipe name: %s\n",
-                strerror(errno));
+                  strerror(errno));
           if (close(server_pipe) < 0) {
             fprintf(stderr, "Error closing server pipe: %s\n", strerror(errno));
             return 1;
@@ -325,7 +361,9 @@ int main(int argc, char *argv[]) {
           continue;
         }
       }
-      pthread_mutex_lock(&session_ids_mutex);
+      if (pthread_mutex_lock(&session_ids_mutex) != 0) {
+        fprintf(stderr, "Error locking mutex: %s\n", strerror(errno));
+      }
       int session_id;
       for (int i = 0; i < MAX_SESSION_COUNT; i++) {
         if (!session_ids[i]) {
@@ -335,14 +373,16 @@ int main(int argc, char *argv[]) {
         }
       }
       pthread_mutex_unlock(&session_ids_mutex);
-      
-      msg *message = (msg*) malloc(sizeof(msg));
+
+      msg *message = (msg *)malloc(sizeof(msg));
       memcpy(message->_req_pipe_path, req_pipe_path, sizeof(req_pipe_path));
       memcpy(message->_resp_pipe_path, resp_pipe_path, sizeof(resp_pipe_path));
       message->_session_id = session_id;
       num_sessions++;
 
-      pthread_mutex_lock(&buffer_mutex);
+      if (pthread_mutex_lock(&buffer_mutex) != 0) {
+        fprintf(stderr, "Error locking mutex: %s\n", strerror(errno));
+      }
       while (count >= MAX_MSG) {
         pthread_cond_wait(&canWrite, &buffer_mutex);
       }
@@ -355,16 +395,15 @@ int main(int argc, char *argv[]) {
       pthread_cond_signal(&canRead);
       pthread_mutex_unlock(&buffer_mutex);
       if (close(server_pipe) < 0) {
-        if(errno == EINTR){
+        if (errno == EINTR) {
           close(server_pipe);
-        }
-        else{
+        } else {
           fprintf(stderr, "Error closing server pipe: %s\n", strerror(errno));
           return 1;
         }
       }
     }
-    if(show_status()){
+    if (show_status()) {
       fprintf(stderr, "Error displaying current status: %s\n", strerror(errno));
     }
     sigusr1 = 0;

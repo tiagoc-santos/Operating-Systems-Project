@@ -47,22 +47,28 @@ int ems_setup(char const *req_pipe_path, char const *resp_pipe_path,
     fprintf(stderr, "Server communication failed: %s:", strerror(errno));
     return 1;
   }
-  if(close(server_pipe) < 0){
+  if (close(server_pipe) < 0) {
     fprintf(stderr, "Error closing server pipe: %s\n", strerror(errno));
     return 1;
   }
   resp_pipe = open(_resp_pipe_path, O_RDONLY);
   if (resp_pipe == -1) {
-    fprintf(stderr, "Server communication failed: %s:", strerror(errno));
+    fprintf(stderr, "Error opening response pipo: %s:", strerror(errno));
     return 1;
   }
   if (read(resp_pipe, &session_id, sizeof(int)) == -1) {
-    fprintf(stderr, "Server communication failed: %s:", strerror(errno));
+    fprintf(stderr, "Error reading session id: %s:", strerror(errno));
+    if (close(resp_pipe) < 0) {
+      fprintf(stderr, "Error closing response pipe: %s\n", strerror(errno));
+    }
     return 1;
   }
   req_pipe = open(_req_pipe_path, O_WRONLY);
   if (req_pipe == -1) {
-    fprintf(stderr, "Server communication failed: %s:", strerror(errno));
+    fprintf(stderr, "Error opening request pipe: %s:", strerror(errno));
+    if (close(resp_pipe) < 0) {
+      fprintf(stderr, "Error closing response pipe: %s\n", strerror(errno));
+    }
     return 1;
   }
   return 0;
@@ -161,7 +167,6 @@ int ems_show(int out_fd, unsigned int event_id) {
   }
 
   size_t num_rows, num_cols;
-  unsigned int seats[num_rows][num_cols];
   if (read(resp_pipe, &num_rows, sizeof(size_t)) < 0) {
     fprintf(stderr, "Error receiving response: %s\n", strerror(errno));
     return 1;
@@ -170,20 +175,21 @@ int ems_show(int out_fd, unsigned int event_id) {
     fprintf(stderr, "Error receiving response: %s\n", strerror(errno));
     return 1;
   }
-
+  unsigned int seats[num_rows][num_cols];
   for (size_t i = 0; i < num_rows; i++) {
     for (size_t j = 0; j < num_cols; j++) {
-
       if (read(resp_pipe, &seats[i][j], sizeof(unsigned int)) < 0) {
         fprintf(stderr, "Error while reading seat: %s\n", strerror(errno));
         return 1;
       }
-
+    }
+  }
+  for (size_t i = 0; i < num_rows; i++) {
+    for (size_t j = 0; j < num_cols; j++) {
       if (print_uint(out_fd, seats[i][j])) {
         perror("Error while writing seat");
         return 1;
       }
-
       if (j < num_cols - 1) {
         if (print_str(out_fd, " ")) {
           perror("Error while writing space character");
@@ -191,7 +197,6 @@ int ems_show(int out_fd, unsigned int event_id) {
         }
       }
     }
-
     if (print_str(out_fd, "\n")) {
       perror("Error while writing new line");
       return 1;

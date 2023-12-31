@@ -286,7 +286,7 @@ int ems_list_events(int out_fd) {
   return 0;
 }
 
-int show(unsigned int event_id){
+int show(unsigned int event_id) {
   if (event_list == NULL) {
     fprintf(stderr, "EMS state must be initialized\n");
     return 1;
@@ -311,11 +311,11 @@ int show(unsigned int event_id){
     fprintf(stderr, "Error locking mutex\n");
     return 1;
   }
-  
+
   for (size_t i = 1; i <= event->rows; i++) {
     for (size_t j = 1; j <= event->cols; j++) {
       printf("%u", (event->data[seat_index(event, i, j)]));
-      if(j < event->cols){
+      if (j < event->cols) {
         printf(" ");
       }
     }
@@ -325,7 +325,7 @@ int show(unsigned int event_id){
   return 0;
 }
 
-int show_status(){
+int show_status() {
   if (event_list == NULL) {
     return 0;
   }
@@ -345,7 +345,7 @@ int show_status(){
   current = event_list->head;
   while (1) {
     printf("%u\n", ((current->event)->id));
-    if(show(((current->event)->id))){
+    if (show(((current->event)->id))) {
       return 1;
     }
     if (current == to) {
