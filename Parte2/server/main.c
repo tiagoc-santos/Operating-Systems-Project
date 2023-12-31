@@ -364,7 +364,7 @@ int main(int argc, char *argv[]) {
       if (pthread_mutex_lock(&session_ids_mutex) != 0) {
         fprintf(stderr, "Error locking mutex: %s\n", strerror(errno));
       }
-      int session_id;
+      int session_id = 0;
       for (int i = 0; i < MAX_SESSION_COUNT; i++) {
         if (!session_ids[i]) {
           session_id = i;
@@ -409,5 +409,9 @@ int main(int argc, char *argv[]) {
     sigusr1 = 0;
   }
   ems_terminate();
+  if (unlink(argv[1]) != 0 && errno != ENOENT) {
+    fprintf(stderr, "Unlink failed: %s\n", strerror(errno));
+    return 1;
+  }
   return 0;
 }
