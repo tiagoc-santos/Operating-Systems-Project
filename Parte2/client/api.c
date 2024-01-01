@@ -171,7 +171,6 @@ int ems_show(int out_fd, unsigned int event_id) {
     fprintf(stderr, "Error receiving response: %s\n", strerror(errno));
     return 1;
   }
-
   if(response != 0){
     return response;
   }
