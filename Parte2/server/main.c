@@ -198,16 +198,7 @@ void *thread_fn() {
           end = 1;
           break;
         }
-        status = ems_show(resp_pipe, event_id);
-        if (write(resp_pipe, &status, sizeof(int)) < 0) {
-          if (errno == EPIPE) {
-            fprintf(stderr, "Response pipe: %s no longer exists\n",
-                    resp_pipe_path);
-          } else {
-            fprintf(stderr, "Error responding: %s\n", strerror(errno));
-          }
-          end = 1;
-        }
+        ems_show(resp_pipe, event_id);
         break;
 
       case '6':
@@ -216,16 +207,7 @@ void *thread_fn() {
           end = 1;
           break;
         }
-        status = ems_list_events(resp_pipe);
-        if (write(resp_pipe, &status, sizeof(int)) < 0) {
-          if (errno == EPIPE) {
-            fprintf(stderr, "Response pipe:%s no longer exists\n",
-                    resp_pipe_path);
-          } else {
-            fprintf(stderr, "Error responding: %s\n", strerror(errno));
-          }
-          end = 1;
-        }
+        ems_list_events(resp_pipe);
         break;
       }
     }

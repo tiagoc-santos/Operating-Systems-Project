@@ -248,10 +248,6 @@ int ems_list_events(int out_fd) {
       perror("Error writing to file descriptor");
       return 1;
     }
-    if (read(resp_pipe, &response, sizeof(int)) < 0) {
-      fprintf(stderr, "Error receiving response: %s\n", strerror(errno));
-      return 1;
-    }
     return response;
   }
   unsigned int ids[num_events];
