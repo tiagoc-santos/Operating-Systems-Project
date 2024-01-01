@@ -1,9 +1,11 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include <signal.h>
+#include <string.h>
+#include <sys/errno.h>
 
 #include "common/io.h"
 #include "eventlist.h"
@@ -184,13 +186,30 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t *xs,
 }
 
 int ems_show(int out_fd, unsigned int event_id) {
+  int status = 0;
   if (event_list == NULL) {
     fprintf(stderr, "EMS state must be initialized\n");
+    status = 1;
+    if (write(out_fd, &status, sizeof(int)) < 0) {
+      if (errno == EPIPE) {
+        fprintf(stderr, "Response pipe no longer exists\n");
+      } else {
+        fprintf(stderr, "Error responding: %s\n", strerror(errno));
+      }
+    }
     return 1;
   }
 
   if (pthread_rwlock_rdlock(&event_list->rwl) != 0) {
     fprintf(stderr, "Error locking list rwl\n");
+    status = 1;
+    if (write(out_fd, &status, sizeof(int)) < 0) {
+      if (errno == EPIPE) {
+        fprintf(stderr, "Response pipe no longer exists\n");
+      } else {
+        fprintf(stderr, "Error responding: %s\n", strerror(errno));
+      }
+    }
     return 1;
   }
 
@@ -201,12 +220,35 @@ int ems_show(int out_fd, unsigned int event_id) {
 
   if (event == NULL) {
     fprintf(stderr, "Event not found\n");
+    status = 1;
+    if (write(out_fd, &status, sizeof(int)) < 0) {
+      if (errno == EPIPE) {
+        fprintf(stderr, "Response pipe no longer exists\n");
+      } else {
+        fprintf(stderr, "Error responding: %s\n", strerror(errno));
+      }
+    }
     return 1;
   }
 
   if (pthread_mutex_lock(&event->mutex) != 0) {
     fprintf(stderr, "Error locking mutex\n");
+    status = 1;
+    if (write(out_fd, &status, sizeof(int)) < 0) {
+      if (errno == EPIPE) {
+        fprintf(stderr, "Response pipe no longer exists\n");
+      } else {
+        fprintf(stderr, "Error responding: %s\n", strerror(errno));
+      }
+    }
     return 1;
+  }
+  if (write(out_fd, &status, sizeof(int)) < 0) {
+      if (errno == EPIPE) {
+        fprintf(stderr, "Response pipe no longer exists\n");
+      } else {
+        fprintf(stderr, "Error responding: %s\n", strerror(errno));
+      }
   }
   if (write(out_fd, &(event->rows), sizeof(size_t)) < 0) {
     perror("Error writing to file descriptor");
@@ -234,26 +276,52 @@ int ems_show(int out_fd, unsigned int event_id) {
 }
 
 int ems_list_events(int out_fd) {
+  int status = 0;
   if (event_list == NULL) {
+    status = 1;
     fprintf(stderr, "EMS state must be initialized\n");
+    if (write(out_fd, &status, sizeof(int)) < 0) {
+      if (errno == EPIPE) {
+        fprintf(stderr, "Response pipe no longer exists\n");
+      } else {
+        fprintf(stderr, "Error responding: %s\n", strerror(errno));
+      }
+    }
     return 1;
   }
 
   if (pthread_rwlock_rdlock(&event_list->rwl) != 0) {
     fprintf(stderr, "Error locking list rwl\n");
+    status = 1;
+    if (write(out_fd, &status, sizeof(int)) < 0) {
+      if (errno == EPIPE) {
+        fprintf(stderr, "Response pipe no longer exists\n");
+      } else {
+        fprintf(stderr, "Error responding: %s\n", strerror(errno));
+      }
+    }
     return 1;
   }
 
   struct ListNode *to = event_list->tail;
   struct ListNode *current = event_list->head;
   size_t num_events = 0;
+
+  if (write(out_fd, &status, sizeof(int)) < 0) {
+    if (errno == EPIPE) {
+      fprintf(stderr, "Response pipe no longer exists\n");
+    } else {
+      fprintf(stderr, "Error responding: %s\n", strerror(errno));
+    }
+    return 1;
+  }
+
   if (current == NULL) {
     if (write(out_fd, &num_events, sizeof(size_t)) < 0) {
       perror("Error writing to file descriptor");
       pthread_rwlock_unlock(&event_list->rwl);
       return 1;
     }
-
     pthread_rwlock_unlock(&event_list->rwl);
     return 0;
   }

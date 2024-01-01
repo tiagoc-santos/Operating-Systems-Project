@@ -201,7 +201,7 @@ void *thread_fn() {
         status = ems_show(resp_pipe, event_id);
         if (write(resp_pipe, &status, sizeof(int)) < 0) {
           if (errno == EPIPE) {
-            fprintf(stderr, "Response pipe:%s no longer exists\n",
+            fprintf(stderr, "Response pipe: %s no longer exists\n",
                     resp_pipe_path);
           } else {
             fprintf(stderr, "Error responding: %s\n", strerror(errno));

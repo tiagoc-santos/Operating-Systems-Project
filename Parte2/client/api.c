@@ -166,6 +166,15 @@ int ems_show(int out_fd, unsigned int event_id) {
     return 1;
   }
 
+  int response;
+  if (read(resp_pipe, &response, sizeof(int)) < 0) {
+    fprintf(stderr, "Error receiving response: %s\n", strerror(errno));
+    return 1;
+  }
+
+  if(response != 0){
+    return response;
+  }
   size_t num_rows, num_cols;
   if (read(resp_pipe, &num_rows, sizeof(size_t)) < 0) {
     fprintf(stderr, "Error receiving response: %s\n", strerror(errno));
@@ -202,11 +211,6 @@ int ems_show(int out_fd, unsigned int event_id) {
       return 1;
     }
   }
-  int response;
-  if (read(resp_pipe, &response, sizeof(int)) < 0) {
-    fprintf(stderr, "Error receiving response: %s\n", strerror(errno));
-    return 1;
-  }
   return response;
 }
 
@@ -223,6 +227,16 @@ int ems_list_events(int out_fd) {
     fprintf(stderr, "Error sending list request: %s\n", strerror(errno));
     return 1;
   }
+
+  if (read(resp_pipe, &response, sizeof(int)) < 0) {
+    fprintf(stderr, "Error receiving response: %s\n", strerror(errno));
+    return 1;
+  }
+  
+  if(response != 0){
+    return response;
+  }
+
   if (read(resp_pipe, &num_events, sizeof(size_t)) < 0) {
     fprintf(stderr, "Error reading number of events: %s\n", strerror(errno));
     return 1;
@@ -258,10 +272,6 @@ int ems_list_events(int out_fd) {
       perror("Error writing to file descriptor");
       return 1;
     }
-  }
-  if (read(resp_pipe, &response, sizeof(int)) < 0) {
-    fprintf(stderr, "Error receiving response: %s\n", strerror(errno));
-    return 1;
   }
   return response;
 }
