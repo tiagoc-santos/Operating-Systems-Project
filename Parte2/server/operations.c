@@ -1,11 +1,11 @@
 #include <fcntl.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <time.h>
-#include <unistd.h>
-#include <signal.h>
 #include <string.h>
 #include <sys/errno.h>
+#include <time.h>
+#include <unistd.h>
 
 #include "common/io.h"
 #include "eventlist.h"
@@ -244,11 +244,11 @@ int ems_show(int out_fd, unsigned int event_id) {
     return 1;
   }
   if (write(out_fd, &status, sizeof(int)) < 0) {
-      if (errno == EPIPE) {
-        fprintf(stderr, "Response pipe no longer exists\n");
-      } else {
-        fprintf(stderr, "Error responding: %s\n", strerror(errno));
-      }
+    if (errno == EPIPE) {
+      fprintf(stderr, "Response pipe no longer exists\n");
+    } else {
+      fprintf(stderr, "Error responding: %s\n", strerror(errno));
+    }
   }
   if (write(out_fd, &(event->rows), sizeof(size_t)) < 0) {
     perror("Error writing to file descriptor");

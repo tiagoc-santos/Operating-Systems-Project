@@ -119,6 +119,7 @@ int ems_create(unsigned int event_id, size_t num_rows, size_t num_cols) {
     fprintf(stderr, "Error receiving response: %s\n", strerror(errno));
     return 1;
   }
+  printf("%d", session_id);
   return response;
 }
 
@@ -171,7 +172,7 @@ int ems_show(int out_fd, unsigned int event_id) {
     fprintf(stderr, "Error receiving response: %s\n", strerror(errno));
     return 1;
   }
-  if(response != 0){
+  if (response != 0) {
     return response;
   }
   size_t num_rows, num_cols;
@@ -231,8 +232,8 @@ int ems_list_events(int out_fd) {
     fprintf(stderr, "Error receiving response: %s\n", strerror(errno));
     return 1;
   }
-  
-  if(response != 0){
+
+  if (response != 0) {
     return response;
   }
 
