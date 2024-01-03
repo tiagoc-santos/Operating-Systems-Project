@@ -29,8 +29,7 @@ pthread_mutex_t session_ids_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t num_session_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t canRead = PTHREAD_COND_INITIALIZER,
                canWrite = PTHREAD_COND_INITIALIZER, 
-               can_produce = PTHREAD_COND_INITIALIZER,
-               can_consume = PTHREAD_COND_INITIALIZER;
+               num_sessions_cond = PTHREAD_COND_INITIALIZER;
 
 void sigusr1_handler(int sig) {
   if (sig == SIGUSR1)
@@ -221,12 +220,9 @@ void *thread_fn() {
       fprintf(stderr, "Error locking mutex: %s\n", strerror(errno));
       continue;
     }
-    while(num_sessions == 0){
-      pthread_cond_wait(&can_consume, &num_session_mutex);
-    }
     session_ids[session_id] = 0;
     num_sessions--;
-    if (pthread_cond_signal(&can_produce) != 0) {
+    if (pthread_cond_signal(&num_sessions_cond) != 0) {
       fprintf(stderr, "%s\n", strerror(errno));
     }
     pthread_mutex_unlock(&num_session_mutex);
@@ -357,16 +353,10 @@ int main(int argc, char *argv[]) {
       if (pthread_mutex_lock(&num_session_mutex) != 0) {
         fprintf(stderr, "Error locking mutex:%s\n", strerror(errno));
       }
-      num_sessions++;
       while (num_sessions == MAX_SESSION_COUNT) {
-        pthread_cond_wait(&can_produce, &num_session_mutex);
+        pthread_cond_wait(&num_sessions_cond, &num_session_mutex);
       }
-      if(pthread_cond_signal(&can_consume) != 0){
-        fprintf(stderr, "Error signaling worker thread: %s\n", strerror(errno));
-        num_sessions--;
-        pthread_mutex_unlock(&num_session_mutex);
-        continue;
-      }
+      num_sessions++;
       pthread_mutex_unlock(&num_session_mutex);
       
       if (pthread_mutex_lock(&session_ids_mutex) != 0) {
