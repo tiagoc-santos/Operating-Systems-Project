@@ -119,7 +119,6 @@ int ems_create(unsigned int event_id, size_t num_rows, size_t num_cols) {
     fprintf(stderr, "Error receiving response: %s\n", strerror(errno));
     return 1;
   }
-  printf("%d", session_id);
   return response;
 }
 

@@ -38,11 +38,11 @@ void sigusr1_handler(int sig) {
 }
 
 void *thread_fn() {
+  sigset_t set;
+  sigemptyset(&set);
+  sigaddset(&set, SIGUSR1);
+  pthread_sigmask(SIG_BLOCK, &set, NULL);
   while (1) {
-    sigset_t set;
-    sigemptyset(&set);
-    sigaddset(&set, SIGUSR1);
-    pthread_sigmask(SIG_BLOCK, &set, NULL);
     signal(SIGPIPE, SIG_IGN);
     unsigned int event_id;
     msg message;
@@ -92,6 +92,8 @@ void *thread_fn() {
         continue;
       }
     }
+
+    //opens the request pipe
     req_pipe = open(req_pipe_path, O_RDONLY);
     if (req_pipe == -1) {
       fprintf(stderr, "Error opening request pipe: %s\n", strerror(errno));
@@ -289,26 +291,12 @@ int main(int argc, char *argv[]) {
 
   int server_pipe;
   while (1) {
+    //ignores SIGPIE signal
     signal(SIGPIPE, SIG_IGN);
+    //checks if the user has send a SIGUSR1 signal
     while (!sigusr1) {
       char op_code;
-
-      // checks if the number of sessions hasn't exceeded the maximum allowed
-      if (pthread_mutex_lock(&num_session_mutex) != 0) {
-        fprintf(stderr, "Error locking mutex:%s\n", strerror(errno));
-      }
-      while (num_sessions == MAX_SESSION_COUNT - 1) {
-        pthread_cond_wait(&can_produce, &num_session_mutex);
-      }
-      num_sessions++;
-      if(pthread_cond_signal(&can_consume) != 0){
-        fprintf(stderr, "Error signaling worker thread: %s\n", strerror(errno));
-        num_sessions--;
-        pthread_mutex_unlock(&num_session_mutex);
-        continue;
-      }
-      pthread_mutex_unlock(&num_session_mutex);
-
+      //opens server pipe to receive client's requests
       if ((server_pipe = open(argv[1], O_RDONLY)) == -1) {
         if (errno == EINTR) {
           server_pipe = open(argv[1], O_RDONLY);
@@ -317,11 +305,14 @@ int main(int argc, char *argv[]) {
           return 1;
         }
       }
-
+      //reads operation code sent by the client
       if (read(server_pipe, &op_code, sizeof(char)) == -1) {
+        //if the operation is interrupted by SIGUSR1 retries it
         if (errno == EINTR) {
           read(server_pipe, &op_code, sizeof(char));
-        } else {
+        } 
+        //gets rid of the client otherwise
+        else {
           fprintf(stderr, "Error reading op_code: %s\n", strerror(errno));
           if (close(server_pipe) < 0) {
             fprintf(stderr, "Error closing server pipe: %s\n", strerror(errno));
@@ -331,10 +322,14 @@ int main(int argc, char *argv[]) {
         }
       }
       char req_pipe_path[PIPE_NAME_SIZE], resp_pipe_path[PIPE_NAME_SIZE];
+      //reads the request pipe path from the client
       if (read(server_pipe, req_pipe_path, PIPE_NAME_SIZE) == -1) {
+        //if the operation is interrupted by SIGUSR1 retries it
         if (errno == EINTR) {
           read(server_pipe, req_pipe_path, PIPE_NAME_SIZE);
-        } else {
+        }
+        //gets rid of the client otherwise 
+        else {
           fprintf(stderr, "Error reading request pipe name: %s\n",
                   strerror(errno));
           if (close(server_pipe) < 0) {
@@ -344,6 +339,7 @@ int main(int argc, char *argv[]) {
           continue;
         }
       }
+      //reads the response pipe path from the client
       if (read(server_pipe, resp_pipe_path, PIPE_NAME_SIZE) == -1) {
         if (errno == EINTR) {
           read(server_pipe, resp_pipe_path, PIPE_NAME_SIZE);
@@ -357,9 +353,26 @@ int main(int argc, char *argv[]) {
           continue;
         }
       }
+      // checks if the number of sessions hasn't exceeded the maximum allowed
+      if (pthread_mutex_lock(&num_session_mutex) != 0) {
+        fprintf(stderr, "Error locking mutex:%s\n", strerror(errno));
+      }
+      num_sessions++;
+      while (num_sessions == MAX_SESSION_COUNT) {
+        pthread_cond_wait(&can_produce, &num_session_mutex);
+      }
+      if(pthread_cond_signal(&can_consume) != 0){
+        fprintf(stderr, "Error signaling worker thread: %s\n", strerror(errno));
+        num_sessions--;
+        pthread_mutex_unlock(&num_session_mutex);
+        continue;
+      }
+      pthread_mutex_unlock(&num_session_mutex);
+      
       if (pthread_mutex_lock(&session_ids_mutex) != 0) {
         fprintf(stderr, "Error locking mutex: %s\n", strerror(errno));
       }
+      //looks for an available session id
       int session_id = 0;
       for (int i = 0; i < MAX_SESSION_COUNT; i++) {
         if (!session_ids[i]) {
@@ -370,11 +383,13 @@ int main(int argc, char *argv[]) {
       }
       pthread_mutex_unlock(&session_ids_mutex);
 
+      //creates a message struct to hold the client's info
       msg *message = (msg *)malloc(sizeof(msg));
       memcpy(message->_req_pipe_path, req_pipe_path, sizeof(req_pipe_path));
       memcpy(message->_resp_pipe_path, resp_pipe_path, sizeof(resp_pipe_path));
       message->_session_id = session_id;
 
+      //writes the message in a producer-consumer buffer
       if (pthread_mutex_lock(&buffer_mutex) != 0) {
         fprintf(stderr, "Error locking mutex: %s\n", strerror(errno));
       }
@@ -387,9 +402,15 @@ int main(int argc, char *argv[]) {
         mainth_pntr = 0;
       }
       count += 1;
-      pthread_cond_signal(&canRead);
+      if(pthread_cond_signal(&canRead) != 0){
+        fprintf(stderr, "Error signalling worker thread: %s\n", strerror(errno));
+        continue;
+      }
       pthread_mutex_unlock(&buffer_mutex);
+
+      //closes the server pipe
       if (close(server_pipe) < 0) {
+        //if the operation gets interrupted by SIGUSR1 retries it
         if (errno == EINTR) {
           close(server_pipe);
         } else {
@@ -398,6 +419,7 @@ int main(int argc, char *argv[]) {
         }
       }
     }
+    //shows current event's status
     if (show_status()) {
       fprintf(stderr, "Error displaying current status: %s\n", strerror(errno));
     }
