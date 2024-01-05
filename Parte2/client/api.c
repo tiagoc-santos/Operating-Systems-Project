@@ -24,25 +24,31 @@ int ems_setup(char const *req_pipe_path, char const *resp_pipe_path,
     fprintf(stderr, "Unlink failed: %s\n", strerror(errno));
     return 1;
   }
+  // opens the server pipe
   int server_pipe = open(server_pipe_path, O_WRONLY);
   if (server_pipe == -1) {
     fprintf(stderr, "Error opening server pipe: %s\n", strerror(errno));
     return 1;
   }
+  // creates the pipes that will be used to communicate requestes and get
+  // responses from the server
   if (mkfifo(req_pipe_path, 0640) != 0 || mkfifo(resp_pipe_path, 0640) != 0) {
     fprintf(stderr, "Error creating request/response pipe: %s\n",
             strerror(errno));
     return 1;
   }
+
   memset(_req_pipe_path, 0, PIPE_NAME_SIZE);
   memset(_resp_pipe_path, 0, PIPE_NAME_SIZE);
   strcpy(_req_pipe_path, req_pipe_path);
   strcpy(_resp_pipe_path, resp_pipe_path);
+
   char buffer[MAX_BUFFER_SIZE];
   memcpy(buffer, &op_code, sizeof(char));
   memcpy(buffer + sizeof(char), _req_pipe_path, sizeof(_req_pipe_path));
   memcpy(buffer + sizeof(char) + sizeof(_req_pipe_path), _resp_pipe_path,
          sizeof(_resp_pipe_path));
+
   if (write(server_pipe, buffer, sizeof(buffer)) < 0) {
     fprintf(stderr, "Server communication failed: %s:", strerror(errno));
     return 1;
@@ -51,11 +57,15 @@ int ems_setup(char const *req_pipe_path, char const *resp_pipe_path,
     fprintf(stderr, "Error closing server pipe: %s\n", strerror(errno));
     return 1;
   }
+
+  // opens the response pipe
   resp_pipe = open(_resp_pipe_path, O_RDONLY);
   if (resp_pipe == -1) {
     fprintf(stderr, "Error opening response pipo: %s:", strerror(errno));
     return 1;
   }
+
+  // reads the session id given by the server
   if (read(resp_pipe, &session_id, sizeof(int)) == -1) {
     fprintf(stderr, "Error reading session id: %s:", strerror(errno));
     if (close(resp_pipe) < 0) {
@@ -63,6 +73,8 @@ int ems_setup(char const *req_pipe_path, char const *resp_pipe_path,
     }
     return 1;
   }
+
+  // opens the request pipe
   req_pipe = open(_req_pipe_path, O_WRONLY);
   if (req_pipe == -1) {
     fprintf(stderr, "Error opening request pipe: %s:", strerror(errno));
@@ -171,7 +183,7 @@ int ems_show(int out_fd, unsigned int event_id) {
     fprintf(stderr, "Error receiving response: %s\n", strerror(errno));
     return 1;
   }
-  if (response != 0) {
+  if (response == 1) {
     return response;
   }
   size_t num_rows, num_cols;
@@ -232,7 +244,7 @@ int ems_list_events(int out_fd) {
     return 1;
   }
 
-  if (response != 0) {
+  if (response == 1) {
     return response;
   }
 

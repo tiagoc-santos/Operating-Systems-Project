@@ -325,8 +325,8 @@ int ems_list_events(int out_fd) {
     pthread_rwlock_unlock(&event_list->rwl);
     return 0;
   }
-  
-  //counts the number of events
+
+  // counts the number of events
   while (1) {
     num_events++;
     if (current == to) {
@@ -334,7 +334,7 @@ int ems_list_events(int out_fd) {
     }
     current = current->next;
   }
-  
+
   if (write(out_fd, &num_events, sizeof(size_t)) < 0) {
     perror("Error writing to file descriptor");
     pthread_rwlock_unlock(&event_list->rwl);
