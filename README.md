@@ -1,2 +1,2 @@
-# Projeto-SO
-Operating Systems 2023/2024 Projects
+# OS Project
+Operating Systems 2023/2024 Project
